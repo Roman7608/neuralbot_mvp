@@ -1,0 +1,112 @@
+# Docker Compose для локального тестирования с Asterisk
+# Использование: docker compose -f docker-compose.asterisk.yml up -d
+
+version: "3.9"
+services:
+  asterisk:
+    image: andrius/asterisk:18
+    container_name: neuralbot_asterisk
+    hostname: asterisk
+    ports:
+      - "5038:5038"  # AMI
+      - "5060:5060/udp"  # SIP
+      - "10000-10099:10000-10099/udp"  # RTP
+    volumes:
+      - ./asterisk-config:/etc/asterisk:rw
+      - recordings:/var/spool/asterisk/monitor
+    environment:
+      - AMI_USER=admin
+      - AMI_PASSWORD=amp111
+    networks:
+      - neuralbot_network
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - neuralbot_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - neuralbot_network
+
+  api:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ./config:/app/config:ro
+      - recordings:/recordings
+    env_file: .env
+    environment:
+      - ASTERISK_HOST=asterisk
+      - ASTERISK_PORT=5038
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+    command: bash -lc "pip install --no-cache-dir fastapi uvicorn[standard] sqlalchemy psycopg2-binary pydantic aiogram httpx pyyaml alembic pytz && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    depends_on:
+      - db
+      - redis
+      - asterisk
+    networks:
+      - neuralbot_network
+
+  worker:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+    env_file: .env
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    command: bash -lc "pip install --no-cache-dir redis rq && python -c 'print(\"worker stub\")'"
+    depends_on:
+      - api
+      - redis
+    networks:
+      - neuralbot_network
+
+networks:
+  neuralbot_network:
+    driver: bridge
+
+volumes:
+  db_data: {}
+  redis_data: {}
+  recordings: {}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

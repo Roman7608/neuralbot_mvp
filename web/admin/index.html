@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuralBot - Админка</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .lead { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; background: #fafafa; }
+        .lead-header { font-weight: bold; color: #007bff; margin-bottom: 8px; }
+        .lead-field { margin: 5px 0; }
+        .lead-field strong { color: #555; }
+        .status-new { color: #28a745; }
+        .status-in_progress { color: #ffc107; }
+        .status-transferred { color: #17a2b8; }
+        .status-failed { color: #dc3545; }
+        .status-done { color: #6c757d; }
+        .nav { margin-bottom: 20px; }
+        .nav a { margin-right: 15px; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+        .nav a:hover { background: #0056b3; }
+        .refresh-btn { background: #28a745; margin-left: 10px; }
+        .refresh-btn:hover { background: #218838; }
+        .filters { background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .filters select, .filters input { margin: 5px; padding: 5px; }
+        .filters button { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+        .filters button:hover { background: #0056b3; }
+        .filters .spacer { flex: 1 1 auto; }
+        .lead-actions { margin-top: 10px; }
+        .lead-actions button { margin-right: 5px; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer; }
+        .btn-edit { background: #ffc107; color: #000; }
+        .btn-edit:hover { background: #e0a800; }
+        .btn-delete { background: #dc3545; color: white; }
+        .btn-delete:hover { background: #c82333; }
+        .export-btn { background: #17a2b8; color: white; margin-left: 10px; }
+        .export-btn:hover { background: #138496; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 50%; border-radius: 5px; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: #000; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NeuralBot - Админка</h1>
+        <div class="nav">
+            <a href="/admin/leads">Лиды</a>
+            <a href="/admin/call_logs">Звонки</a>
+            <a href="/admin/metrics">Метрики</a>
+            <a href="/widget/">Виджет</a>
+            <button class="refresh-btn" onclick="loadLeads()">Обновить</button>
+            <button class="export-btn" onclick="exportLeads()">Экспорт CSV</button>
+        </div>
+        
+        <div class="filters">
+            <h3>Фильтры</h3>
+            <select id="statusFilter">
+                <option value="">Все статусы</option>
+                <option value="new">Новые</option>
+                <option value="in_progress">В работе</option>
+                <option value="transferred">Переданные</option>
+                <option value="failed">Неудачные</option>
+                <option value="done">Завершённые</option>
+            </select>
+            <select id="sourceFilter">
+                <option value="">Все источники</option>
+                <option value="phone">Телефон</option>
+                <option value="telegram">Telegram</option>
+                <option value="web">Веб</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Поиск по имени или телефону...">
+            <button onclick="applyFilters()">Применить</button>
+            <button onclick="clearFilters()">Сбросить</button>
+        </div>
+        
+        <div id="content">
+            <h2>Лиды</h2>
+            <div style="margin:6px 0; display:flex; align-items:center; gap:10px;">
+                <label>На странице:
+                    <select id="pageSize">
+                        <option>10</option>
+                        <option selected>20</option>
+                        <option>50</option>
+                        <option>100</option>
+                    </select>
+                </label>
+                <label><input type="checkbox" id="autoRefresh"/> Авто‑обновление (15с)</label>
+                <div class="spacer"></div>
+                <button class="refresh-btn" onclick="loadLeads()">Обновить</button>
+            </div>
+            <div id="leads"></div>
+            <div id="pager" style="margin-top:10px;"></div>
+
+            <h2 style="margin-top:28px;">Метрики</h2>
+            <canvas id="metricsChart" height="90"></canvas>
+        </div>
+    </div>
+
+    <!-- Модальное окно для редактирования -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h3>Редактировать лид</h3>
+            <form id="editForm">
+                <input type="hidden" id="editId">
+                <div style="margin: 10px 0;">
+                    <label>Статус:</label>
+                    <select id="editStatus">
+                        <option value="new">Новый</option>
+                        <option value="in_progress">В работе</option>
+                        <option value="transferred">Переданный</option>
+                        <option value="failed">Неудачный</option>
+                        <option value="done">Завершённый</option>
+                    </select>
+                </div>
+                <div style="margin: 10px 0;">
+                    <label>Комментарий:</label>
+                    <textarea id="editComment" rows="3" style="width: 100%;"></textarea>
+                </div>
+                <button type="button" onclick="saveLead()">Сохранить</button>
+                <button type="button" onclick="closeModal()">Отмена</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        let allLeads = [];
+        let filteredLeads = [];
+        let currentPage = 1;
+        let pageSize = 20;
+        let autoTimer = null;
+
+        async function loadLeads() {
+            try {
+                const response = await fetch('/admin/leads');
+                allLeads = await response.json();
+                filteredLeads = [...allLeads];
+                displayLeads();
+                updatePager();
+                drawMetrics();
+            } catch (error) {
+                document.getElementById('leads').innerHTML = '<p>Ошибка загрузки: ' + error.message + '</p>';
+            }
+        }
+
+        function displayLeads() {
+            const container = document.getElementById('leads');
+            const start = (currentPage - 1) * pageSize;
+            const pageItems = filteredLeads.slice(start, start + pageSize);
+            if (filteredLeads.length === 0) {
+                container.innerHTML = '<p>Лидов не найдено</p>';
+                return;
+            }
+            
+            container.innerHTML = pageItems.map(lead => `
+                <div class="lead">
+                    <div class="lead-header">Лид #${lead.id}</div>
+                    <div class="lead-field"><strong>Имя:</strong> ${lead.name || 'Не указано'}</div>
+                    <div class="lead-field"><strong>Телефон:</strong> ${lead.phone}</div>
+                    <div class="lead-field"><strong>Город:</strong> ${lead.city || 'Не указан'}</div>
+                    <div class="lead-field"><strong>Бренд:</strong> ${lead.brand || 'Не указан'}</div>
+                    <div class="lead-field"><strong>Отдел:</strong> ${lead.department_code || 'Не указан'}</div>
+                    <div class="lead-field"><strong>Источник:</strong> ${lead.source}</div>
+                    <div class="lead-field"><strong>Статус:</strong> <span class="status-${lead.status}">${lead.status}</span></div>
+                    <div class="lead-field"><strong>Комментарий:</strong> ${lead.comment || 'Нет'}</div>
+                    <div class="lead-field"><strong>Создан:</strong> ${new Date(lead.created_at).toLocaleString('ru-RU')}</div>
+                    <div class="lead-actions">
+                        <button class="btn-edit" onclick="editLead(${lead.id})">Редактировать</button>
+                    </div>
+                </div>
+            `).join('');
+            updatePager();
+        }
+
+        function applyFilters() {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const sourceFilter = document.getElementById('sourceFilter').value;
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+
+            filteredLeads = allLeads.filter(lead => {
+                const statusMatch = !statusFilter || lead.status === statusFilter;
+                const sourceMatch = !sourceFilter || lead.source === sourceFilter;
+                const searchMatch = !searchTerm || 
+                    (lead.name && lead.name.toLowerCase().includes(searchTerm)) ||
+                    lead.phone.includes(searchTerm);
+                
+                return statusMatch && sourceMatch && searchMatch;
+            });
+
+            displayLeads();
+        }
+
+        function clearFilters() {
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('sourceFilter').value = '';
+            document.getElementById('searchInput').value = '';
+            filteredLeads = [...allLeads];
+            displayLeads();
+        }
+
+        function updatePager() {
+            const pager = document.getElementById('pager');
+            const totalPages = Math.max(1, Math.ceil(filteredLeads.length / pageSize));
+            if (currentPage > totalPages) currentPage = totalPages;
+            const btn = (n, label=n) => `<button onclick="gotoPage(${n})" ${n===currentPage?'style="background:#007bff;color:#fff"':''}>${label}</button>`;
+            let html = '';
+            if (totalPages > 1) {
+                html += btn(Math.max(1, currentPage-1), '«');
+                const start = Math.max(1, currentPage-2);
+                const end = Math.min(totalPages, currentPage+2);
+                for (let i=start;i<=end;i++) html += btn(i);
+                html += btn(Math.min(totalPages, currentPage+1), '»');
+                html += ` <span style="margin-left:8px;opacity:.7">Стр. ${currentPage} из ${totalPages} (всего ${filteredLeads.length})</span>`;
+            }
+            pager.innerHTML = html;
+        }
+
+        function gotoPage(n){ currentPage = n; displayLeads(); }
+
+        function editLead(id) {
+            const lead = allLeads.find(l => l.id === id);
+            if (!lead) return;
+
+            document.getElementById('editId').value = lead.id;
+            document.getElementById('editStatus').value = lead.status;
+            document.getElementById('editComment').value = lead.comment || '';
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        async function saveLead() {
+            const id = document.getElementById('editId').value;
+            const status = document.getElementById('editStatus').value;
+            const comment = document.getElementById('editComment').value;
+
+            try {
+                const response = await fetch(`/admin/leads/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status, comment })
+                });
+
+                if (response.ok) {
+                    // Обновляем локальные данные
+                    const lead = allLeads.find(l => l.id == id);
+                    if (lead) {
+                        lead.status = status;
+                        lead.comment = comment;
+                    }
+                    displayLeads();
+                    closeModal();
+                } else {
+                    alert('Ошибка сохранения');
+                }
+            } catch (error) {
+                alert('Ошибка: ' + error.message);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function exportLeads() {
+            const csv = [
+                ['ID', 'Имя', 'Телефон', 'Город', 'Бренд', 'Отдел', 'Источник', 'Статус', 'Комментарий', 'Создан'],
+                ...filteredLeads.map(lead => [
+                    lead.id,
+                    lead.name || '',
+                    lead.phone,
+                    lead.city || '',
+                    lead.brand || '',
+                    lead.department_code || '',
+                    lead.source,
+                    lead.status,
+                    lead.comment || '',
+                    new Date(lead.created_at).toLocaleString('ru-RU')
+                ])
+            ].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `leads_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        }
+
+        async function drawMetrics(){
+            try{
+                const r = await fetch('/admin/metrics');
+                const m = await r.json();
+                const ctx = document.getElementById('metricsChart');
+                if (!ctx) return;
+                const data = {
+                    labels: ['Лиды', 'Звонки'],
+                    datasets: [{
+                        label: 'Счётчики',
+                        data: [m.leads||0, m.calls||0],
+                        backgroundColor: ['#28a74588','#17a2b888'],
+                        borderColor: ['#28a745','#17a2b8'],
+                        borderWidth: 1
+                    }]
+                };
+                if (window.__metricsChart){ window.__metricsChart.data = data; window.__metricsChart.update(); }
+                else { window.__metricsChart = new Chart(ctx, { type: 'bar', data }); }
+            }catch(e){ /* ignore */ }
+        }
+
+        document.getElementById('pageSize').addEventListener('change', (e)=>{ pageSize = parseInt(e.target.value,10); currentPage=1; displayLeads(); });
+        document.getElementById('autoRefresh').addEventListener('change', (e)=>{
+            if(e.target.checked){ autoTimer = setInterval(loadLeads, 15000); }
+            else if (autoTimer){ clearInterval(autoTimer); autoTimer=null; }
+        });
+
+        // Закрытие модального окна по клику вне его
+        window.onclick = function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+
+        loadLeads();
+    </script>
+</body>
+</html>

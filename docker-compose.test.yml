@@ -1,0 +1,112 @@
+# Docker Compose для локального тестирования с Asterisk
+# Использование: docker compose -f docker-compose.test.yml up -d
+
+version: "3.9"
+services:
+  asterisk:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk
+    container_name: neuralbot_asterisk_test
+    hostname: asterisk
+    ports:
+      - "5038:5038"  # AMI
+      - "5060:5060/udp"  # SIP
+      - "10000-10100:10000-10100/udp"  # RTP (голос)
+    volumes:
+      - ./asterisk-test-config:/etc/asterisk:rw
+      - asterisk_recordings:/var/spool/asterisk/monitor
+    environment:
+      - ENABLE_AMI=yes
+    networks:
+      - neuralbot_test_network
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db:
+    image: postgres:16
+    container_name: neuralbot_db_test
+    environment:
+      POSTGRES_DB: ${DB_NAME:-neuralbot}
+      POSTGRES_USER: ${DB_USER:-neuralbot}
+      POSTGRES_PASSWORD: ${DB_PASS:-neuralbot123}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - neuralbot_test_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-neuralbot} -d ${DB_NAME:-neuralbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: neuralbot_redis_test
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - neuralbot_test_network
+
+  api:
+    image: python:3.11-slim
+    container_name: neuralbot_api_test
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ./config:/app/config:ro
+      - asterisk_recordings:/recordings
+    env_file: .env
+    environment:
+      - ASTERISK_HOST=asterisk
+      - ASTERISK_PORT=5038
+      - ASTERISK_USERNAME=admin
+      - ASTERISK_PASSWORD=amp111
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+    command: bash -lc "pip install --no-cache-dir fastapi uvicorn[standard] sqlalchemy psycopg2-binary pydantic aiogram httpx pyyaml alembic pytz redis && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      asterisk:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - neuralbot_test_network
+
+  worker:
+    image: python:3.11-slim
+    container_name: neuralbot_worker_test
+    working_dir: /app
+    volumes:
+      - ./:/app
+    env_file: .env
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    command: bash -lc "pip install --no-cache-dir redis rq && python -c 'print(\"worker stub\")'"
+    depends_on:
+      - api
+      - redis
+    networks:
+      - neuralbot_test_network
+
+networks:
+  neuralbot_test_network:
+    driver: bridge
+
+volumes:
+  db_data: {}
+  redis_data: {}
+  asterisk_recordings: {}
+

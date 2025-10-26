@@ -1,0 +1,24 @@
+FROM debian:bullseye-slim
+
+# Установка Asterisk
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    asterisk \
+    asterisk-core-sounds-en \
+    asterisk-core-sounds-en-gsm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Создание директорий
+RUN mkdir -p /var/spool/asterisk/monitor \
+    && mkdir -p /var/log/asterisk \
+    && chown -R asterisk:asterisk /var/spool/asterisk /var/log/asterisk
+
+# Копирование конфигурации
+COPY asterisk-test-config/* /etc/asterisk/
+
+# Открытие портов
+EXPOSE 5038
+
+# Запуск Asterisk
+CMD ["asterisk", "-f", "-vvv"]
+

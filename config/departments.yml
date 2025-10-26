@@ -1,0 +1,161 @@
+timezone: "Europe/Samara"
+
+departments:
+  - code: sales_chery_tlt
+    name: "Продажи Chery Тольятти"
+    city: "Тольятти"
+    brand: "Chery"
+    ext: "001"
+    sip_target: "PJSIP/001"
+    tg_chat_id: -1002972087933  # Neurobot_Chery
+    type: "sales"
+  - code: sales_jetour_tlt
+    name: "Продажи Jetour Тольятти"
+    city: "Тольятти"
+    brand: "Jetour"
+    ext: "002"
+    sip_target: "PJSIP/002"
+    tg_chat_id: -1004920166613  # Neurobot_Jetour
+    type: "sales"
+  - code: sales_lada_tlt
+    name: "Продажи Lada Тольятти"
+    city: "Тольятти"
+    brand: "Lada"
+    ext: "003"
+    sip_target: "PJSIP/003"
+    tg_chat_id: -1004894652862  # Neurobot_Lada
+    type: "sales"
+  - code: sales_haval_smr
+    name: "Продажи Haval Самара"
+    city: "Самара"
+    brand: "Haval"
+    ext: "004"
+    sip_target: "PJSIP/004"
+    tg_chat_id: -1002972087933  # Neurobot_Chery (любые другие новые)
+    type: "sales"
+  - code: used_cars_tlt
+    name: "С пробегом Тольятти"
+    city: "Тольятти"
+    ext: "005"
+    sip_target: "PJSIP/005"
+    tg_chat_id: -1002914948690  # Neurobot_probeg
+    type: "sales"
+  - code: used_cars_smr
+    name: "С пробегом Самара"
+    city: "Самара"
+    ext: "006"
+    sip_target: "PJSIP/006"
+    tg_chat_id: -1002914948690  # Neurobot_probeg
+    type: "sales"
+  - code: service_mech_tlt
+    name: "СТО Слесарный Тольятти"
+    city: "Тольятти"
+    ext: "007"
+    sip_target: "PJSIP/007"
+    tg_chat_id: -1003182881943  # Neurobot_STO_Chery (любые другие в слесарном)
+    type: "service"
+  - code: service_body_tlt
+    name: "СТО Кузовной Тольятти"
+    city: "Тольятти"
+    ext: "008"
+    sip_target: "PJSIP/008"
+    tg_chat_id: -1003127031679  # Neurobot_Kuzov_Chery (любые в кузовном)
+    type: "service"
+  - code: service_mech_smr
+    name: "СТО Слесарный Самара"
+    city: "Самара"
+    ext: "009"
+    sip_target: "PJSIP/009"
+    tg_chat_id: -1003182881943  # Neurobot_STO_Chery (любые другие в слесарном)
+    type: "service"
+  - code: service_body_smr
+    name: "СТО Кузовной Самара"
+    city: "Самара"
+    ext: "010"
+    sip_target: "PJSIP/010"
+    tg_chat_id: -1003127031679  # Neurobot_Kuzov_Chery (любые в кузовном)
+    type: "service"
+  - code: service_mech_lada
+    name: "СТО Слесарный Lada"
+    city: "Тольятти"
+    ext: "018"
+    sip_target: "PJSIP/018"
+    tg_chat_id: -1003159687346  # Neurobot_STO_Lada (только Lada в слесарном)
+    type: "service"
+  - code: spares_tlt
+    name: "Запчасти Тольятти"
+    city: "Тольятти"
+    ext: "011"
+    sip_target: "PJSIP/011"
+    tg_chat_id: -1003056030547  # Neurobot_Spares_Chery (любые другие)
+    type: "spares"
+  - code: spares_smr
+    name: "Запчасти Самара"
+    city: "Самара"
+    ext: "012"
+    sip_target: "PJSIP/012"
+    tg_chat_id: -1003056030547  # Neurobot_Spares_Chery (любые другие)
+    type: "spares"
+  - code: spares_lada
+    name: "Запчасти Lada"
+    city: "Тольятти"
+    ext: "019"
+    sip_target: "PJSIP/019"
+    tg_chat_id: -1003186058405  # Neurobot_Spares_Lada (только Lada)
+    type: "spares"
+  - code: director
+    name: "Директор"
+    ext: "013"
+    sip_target: "PJSIP/013"
+    tg_chat_id: -1002944317515  # Neuro_Other
+    type: "other"
+  - code: accounting
+    name: "Бухгалтерия"
+    ext: "014"
+    sip_target: "PJSIP/014"
+    tg_chat_id: -1002746330909  # Neurobot_Buch
+    type: "other"
+  - code: marketing
+    name: "Отдел маркетинга"
+    ext: "015"
+    sip_target: "PJSIP/015"
+    tg_chat_id: -1002944317515  # Neuro_Other
+    type: "other"
+  - code: credit_insurance
+    name: "Кредитно-страховой отдел"
+    ext: "016"
+    sip_target: "PJSIP/016"
+    tg_chat_id: -1002944317515  # Neuro_Other
+    type: "other"
+  - code: chief_engineer
+    name: "Служба главного инженера"
+    ext: "017"
+    sip_target: "PJSIP/017"
+    tg_chat_id: -1002944317515  # Neuro_Other
+    type: "other"
+  - code: consultant_fallback
+    name: "Консультант (fallback)"
+    ext: "099"
+    sip_target: "PJSIP/099"
+    tg_chat_id: -1002944317515  # Neuro_Other
+    type: "other"
+
+working_hours:
+  default:
+    weekday_hours:
+      "0": "09:00-20:00"
+      "1": "09:00-20:00"
+      "2": "09:00-20:00"
+      "3": "09:00-20:00"
+      "4": "09:00-20:00"
+      "5": "09:00-20:00"
+      "6": "09:00-20:00"
+
+work_exceptions:
+  - date: "2025-12-31"
+    start_time: "09:00"
+    end_time: "15:00"
+    note: "Сокращенный день"
+  - date: "2026-01-01"
+    is_closed: true
+    note: "Праздник — все закрыты"
