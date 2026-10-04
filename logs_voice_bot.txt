@@ -1,0 +1,58 @@
+voice-bot-1  | INFO:     127.0.0.1:56222 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | INFO:     127.0.0.1:46444 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | INFO:     127.0.0.1:49356 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | INFO:     127.0.0.1:44456 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | INFO:     127.0.0.1:53206 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | INFO:     127.0.0.1:38718 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | INFO:     127.0.0.1:53620 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | 2026-03-20 15:11:46,440 - voice-bot - INFO - AudioSocket connection from ('172.18.0.9', 38190) (greeting_type=chery_tenet)
+voice-bot-1  | 2026-03-20 15:11:46,441 - voice-bot - INFO - Call UUID: 00000000-0000-4000-8000-017740195058 from ('172.18.0.9', 38190)
+voice-bot-1  | 2026-03-20 15:11:46,441 - dialog.conversation_state - INFO - Инициализирована state machine (session_uuid=00000000-0000-4000-8000-017740195058, state=initial)
+voice-bot-1  | 2026-03-20 15:11:46,441 - dialog.name_extractor - INFO - NameExtractor инициализирован (внешних имён: 0)
+voice-bot-1  | 2026-03-20 15:11:46,441 - dialog.date_parser - INFO - Инициализирован DateParser
+voice-bot-1  | 2026-03-20 15:11:46,441 - dialog.car_brand_extractor - INFO - CarBrandExtractor инициализирован
+voice-bot-1  | 2026-03-20 15:11:46,441 - dialog.database_manager - INFO - Инициализирован DatabaseManager (clientsbase=/app/data/clientsbase.xlsx, norma=/app/data/norma.xlsx, slot=/app/data/slot.xlsx)
+voice-bot-1  | 2026-03-20 15:11:46,441 - dialog.leads_manager - INFO - Инициализирован LeadsManager (file=/app/data/test_leads.xlsx, use_database=False)
+voice-bot-1  | 2026-03-20 15:11:46,441 - dialog.rag_system_states - INFO - Инициализирована RAG-система на основе стейтов (правил=9, dir=/app/audio_responses)
+voice-bot-1  | 2026-03-20 15:11:46,442 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] Call started
+voice-bot-1  | 2026-03-20 15:11:46,442 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] greeting_playback_start (type=chery_tenet)
+voice-bot-1  | 2026-03-20 15:11:46,442 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] BOT [WAV]: 
+voice-bot-1  | 2026-03-20 15:11:57,619 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] playback_end[01_greeting_chery_tenet.wav]
+voice-bot-1  | 2026-03-20 15:11:57,619 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] greeting_playback_complete (waiting for name/5sec before departments)
+voice-bot-1  | 2026-03-20 15:11:57,619 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] record_attempt=1 start 0.1ms after playback_end[01_greeting_chery_tenet.wav]
+voice-bot-1  | 2026-03-20 15:11:59,068 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] _record_speech attempt=1: got 760.0ms audio, RMS=0.028557, total_frames=627, audio_frames=627, speech_detected=True
+voice-bot-1  | 2026-03-20 15:11:59,136 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] STT: 68ms, input=12160 samples -> 'Роман.'
+voice-bot-1  | 2026-03-20 15:11:59,136 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] CLIENT: Роман.
+voice-bot-1  | 2026-03-20 15:11:59,137 - dialog.name_extractor - INFO - Короткий ответ 'Роман.' интерпретирован как имя 'Роман'
+voice-bot-1  | 2026-03-20 15:11:59,137 - dialog.conversation_state - INFO - Имя клиента установлено: Роман (session_uuid=00000000-0000-4000-8000-017740195058)
+voice-bot-1  | 2026-03-20 15:11:59,137 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] BOT [WAV]: 
+voice-bot-1  | 2026-03-20 15:12:07,674 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] playback_end[12_ask_department_chery_tenet.wav]
+voice-bot-1  | 2026-03-20 15:12:07,674 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] record_attempt=2 start 0.1ms after playback_end[12_ask_department_chery_tenet.wav]
+voice-bot-1  | INFO:     127.0.0.1:34106 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | 2026-03-20 15:12:09,590 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] _record_speech attempt=2: got 1220.0ms audio, RMS=0.036292, total_frames=526, audio_frames=526, speech_detected=True
+voice-bot-1  | 2026-03-20 15:12:09,657 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] STT: 67ms, input=19520 samples -> 'Кзувной ремонт.'
+voice-bot-1  | 2026-03-20 15:12:09,657 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] CLIENT: Кзувной ремонт.
+voice-bot-1  | 2026-03-20 15:12:09,657 - dialog.conversation_state - INFO - Потребность выявлена: service (session_uuid=00000000-0000-4000-8000-017740195058)
+voice-bot-1  | 2026-03-20 15:12:09,657 - dialog.conversation_state - INFO - Переход состояния: initial -> need_identified (session_uuid=00000000-0000-4000-8000-017740195058)
+voice-bot-1  | 2026-03-20 15:12:09,659 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] TTS: 2ms, 3.9s audio @ 48000 Hz
+voice-bot-1  | 2026-03-20 15:12:13,401 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] playback_end[tts:Я правильно поняла, Вас интересует м+аст]
+voice-bot-1  | 2026-03-20 15:12:13,401 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] record_attempt=3 start 0.1ms after playback_end[tts:Я правильно поняла, Вас интересует м+аст]
+voice-bot-1  | 2026-03-20 15:12:16,730 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] _record_speech attempt=3: got 2640.0ms audio, RMS=0.022285, total_frames=356, audio_frames=356, speech_detected=True
+voice-bot-1  | 2026-03-20 15:12:16,799 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] STT: 68ms, input=42240 samples -> 'Нет, меня интересует кузовной ремонт.'
+voice-bot-1  | 2026-03-20 15:12:16,799 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] CLIENT: Нет, меня интересует кузовной ремонт.
+voice-bot-1  | 2026-03-20 15:12:16,799 - dialog.conversation_state - INFO - Потребность выявлена: body_repair (session_uuid=00000000-0000-4000-8000-017740195058)
+voice-bot-1  | 2026-03-20 15:12:16,799 - dialog.conversation_state - INFO - Переход состояния: need_identified -> need_identified (session_uuid=00000000-0000-4000-8000-017740195058)
+voice-bot-1  | 2026-03-20 15:12:16,801 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] TTS: 2ms, 3.9s audio @ 48000 Hz
+voice-bot-1  | 2026-03-20 15:12:20,493 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] playback_end[tts:Я правильно поняла, Вас интересует м+аст]
+voice-bot-1  | 2026-03-20 15:12:20,493 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] record_attempt=4 start 0.1ms after playback_end[tts:Я правильно поняла, Вас интересует м+аст]
+voice-bot-1  | 2026-03-20 15:12:24,051 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] _record_speech attempt=4: got 2860.0ms audio, RMS=0.013256, total_frames=366, audio_frames=366, speech_detected=True
+voice-bot-1  | 2026-03-20 15:12:24,113 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] STT: 62ms, input=45760 samples -> 'Меня интересует мастер-консультант зонного цеха.'
+voice-bot-1  | 2026-03-20 15:12:24,113 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] CLIENT: Меня интересует мастер-консультант зонного цеха.
+voice-bot-1  | 2026-03-20 15:12:24,113 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] BOT [WAV]: Я Вас не совсем поняла. Скажите, пожалуйста, «да» или «нет».
+voice-bot-1  | 2026-03-20 15:12:27,187 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] playback_end[18_ask_yes_no.wav]
+voice-bot-1  | 2026-03-20 15:12:27,187 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] record_attempt=5 start 0.1ms after playback_end[18_ask_yes_no.wav]
+voice-bot-1  | 2026-03-20 15:12:29,308 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] Client hung up during recording
+voice-bot-1  | 2026-03-20 15:12:29,308 - services.voice.session - INFO - [00000000-0000-4000-8000-017740195058] Call ended (state=need_identified)
+voice-bot-1  | 2026-03-20 15:12:29,308 - services.voice.manager - INFO - Call 00000000-0000-4000-8000-017740195058 ended, duration=42.9s, active=0
+voice-bot-1  | INFO:     127.0.0.1:52304 - "GET /health HTTP/1.1" 200 OK
+voice-bot-1  | INFO:     127.0.0.1:33074 - "GET /health HTTP/1.1" 200 OK

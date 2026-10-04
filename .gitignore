@@ -1,0 +1,35 @@
+# Секреты и конфиги (НЕ пушить)
+.env
+.env.*
+!.env.example
+license.key
+.license_last_check
+
+# Python
+venv/
+venv_gigaam/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Бэкапы и экспорты
+*.tar.gz
+*.tgz
+*.zip
+*_backup_*
+Records_export*.csv
+
+# Данные и кэши
+storage/calls/
+models/
+*.xlsx
+!clientsbase.xlsx
+!norma.xlsx
+!slot.xlsx
+!test_leads.xlsx

@@ -1,0 +1,8 @@
+# Зависимости для админ-панели
+# pip install -r requirements-admin.txt
+
+fastapi
+uvicorn[standard]
+python-multipart
+bcrypt
+openpyxl

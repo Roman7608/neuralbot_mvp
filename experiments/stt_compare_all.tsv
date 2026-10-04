@@ -1,0 +1,50 @@
+H0_base	spk1_001.wav	Да.
+H1_prompt	spk1_001.wav	Да.
+H2_loud8db	out.wav	Да.
+H3_trim	out.wav	Субтитры сделал DimaTorzok
+H4_loudtrim+prompt	out.wav	Субтитры сделал DimaTorzok
+H0_base	spk1_002.wav	Продолжение следует...
+H1_prompt	spk1_002.wav	Продолжение следует...
+H2_loud8db	out.wav	Субтитры создавал DimaTorzok
+H3_trim	out.wav	Субтитры сделал DimaTorzok
+H4_loudtrim+prompt	out.wav	Субтитры сделал DimaTorzok
+H0_base	spk1_003.wav	Продолжение следует...
+H1_prompt	spk1_003.wav	Продолжение следует...
+H2_loud8db	out.wav	Продолжение следует...
+H3_trim	out.wav	ПОДПИШИСЬ!
+H4_loudtrim+prompt	out.wav	ПОДПИШИСЬ!
+H0_base	spk1_004.wav	Продолжение следует...
+H1_prompt	spk1_004.wav	Продолжение следует...
+H2_loud8db	out.wav	Согласна.
+H3_trim	out.wav	Субтитры сделал DimaTorzok
+H4_loudtrim+prompt	out.wav	Продолжение следует...
+H0_base	spk2_001.wav	
+H1_prompt	spk2_001.wav	
+H2_loud8db	out.wav	
+H3_trim	out.wav	
+H4_loudtrim+prompt	out.wav	
+H0_base	spk2_002.wav	
+H1_prompt	spk2_002.wav	
+H2_loud8db	out.wav	
+H3_trim	out.wav	
+H4_loudtrim+prompt	out.wav	
+H0_base	spk3_001.wav	Субтитры сделал DimaTorzok
+H1_prompt	spk3_001.wav	Субтитры сделал DimaTorzok
+H2_loud8db	out.wav	Ла!
+H3_trim	out.wav	Субтитры сделал DimaTorzok
+H4_loudtrim+prompt	out.wav	
+H0_base	spk3_002.wav	Хорошо.
+H1_prompt	spk3_002.wav	Хорошо.
+H2_loud8db	out.wav	Прошу.
+H3_trim	out.wav	Продолжение следует...
+H4_loudtrim+prompt	out.wav	Продолжение следует...
+H0_base	spk3_003.wav	Субтитры сделал DimaTorzok
+H1_prompt	spk3_003.wav	Субтитры сделал DimaTorzok
+H2_loud8db	out.wav	Продолжение следует...
+H3_trim	out.wav	Субтитры сделал DimaTorzok
+H4_loudtrim+prompt	out.wav	Субтитры сделал DimaTorzok
+H0_base	spk3_004.wav	
+H1_prompt	spk3_004.wav	
+H2_loud8db	out.wav	
+H3_trim	out.wav	Субтитры создавал DimaTorzok
+H4_loudtrim+prompt	out.wav	Субтитры создавал DimaTorzok

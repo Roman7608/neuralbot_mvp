@@ -1,0 +1,53 @@
+--- modeling_gigaam.py
++++ modeling_gigaam.py
+@@ -302,6 +302,7 @@ def segment_audio_file(
+     strict_limit_duration: float = 30.0,
+     new_chunk_threshold: float = 0.2,
+     overlap_sec: float = 1.0,
++    first_chunk_max_sec: Optional[float] = None,
+     device: torch.device = torch.device("cpu"),
+ ) -> Tuple[List[torch.Tensor], List[Tuple[float, float]]]:
+@@ -328,7 +329,7 @@ def segment_audio_file(
+         return audio[int(start_ext * sr) : int(end_ext * sr)]
+ 
+-    def _update_segments(curr_start: float, curr_end: float, curr_duration: float):
+-        if curr_duration > strict_limit_duration:
+-            max_segments = int(curr_duration / strict_limit_duration) + 1
++    def _update_segments(curr_start: float, curr_end: float, curr_duration: float, strict: float = strict_limit_duration):
++        if curr_duration > strict:
++            max_segments = int(curr_duration / strict) + 1
+             segment_duration = curr_duration / max_segments
+             c_end = curr_start + segment_duration
+             for _ in range(max_segments - 1):
+@@ -341,11 +342,15 @@ def segment_audio_file(
+ 
+     # Concat segments from pipeline into chunks for asr according to max/min duration
+     # Segments longer than strict_limit_duration are splitted manually
++    # first_chunk_max_sec: первый чанк короче — лучше распознавание приветствия (3–8 с)
++    first_max = first_chunk_max_sec
+     for segment in sad_segments.get_timeline().support():
+         start = max(0, segment.start)
+         end = min(audio.shape[0] / sr, segment.end)
+-        if curr_duration > new_chunk_threshold and (
+-            curr_duration + (end - curr_end) > max_duration
+-            or curr_duration > min_duration
+-        ):
+-            _update_segments(curr_start, curr_end, curr_duration)
++        eff_max = first_max if (first_max is not None and len(boundaries) == 0) else max_duration
++        eff_min = first_max if (first_max is not None and len(boundaries) == 0) else min_duration
++        if curr_duration > new_chunk_threshold and (
++            curr_duration + (end - curr_end) > eff_max
++            or curr_duration > eff_min
++        ):
++            strict_here = first_max if (first_max is not None and len(boundaries) == 0) else strict_limit_duration
++            _update_segments(curr_start, curr_end, curr_duration, strict=strict_here)
+             curr_start = start
+         curr_end = end
+         curr_duration = curr_end - curr_start
+ 
+     if curr_duration > new_chunk_threshold:
+-        _update_segments(curr_start, curr_end, curr_duration)
++        strict_here = first_max if (first_max is not None and len(boundaries) == 0) else strict_limit_duration
++        _update_segments(curr_start, curr_end, curr_duration, strict=strict_here)
+ 
+     return segments, boundaries

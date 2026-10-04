@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SpRecord по дате — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .sp-note { font-size: 0.88rem; color: #444; max-width: 960px; line-height: 1.45; margin: 0.35rem 0 0.75rem; }
+    #filesTable th, #filesTable td { font-size: 0.85rem; vertical-align: middle; }
+    #filesTable td.mono { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+    .sp-audio-cell audio { max-width: 220px; vertical-align: middle; }
+    .vb-row-num { text-align: right; font-variant-numeric: tabular-nums; width: 2.75rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Записи SpRecord по дате</h1>
+    <nav id="mainNav">
+      <a href="/voice-transfers">Переводы бота</a>
+      <a href="/sprecord-browse" class="nav-active">SpRecord по дате</a>
+      <a href="/" id="navCalls">Звонки</a>
+      <a href="/upload" id="navUpload">Загрузка</a>
+      <a href="/leads" id="navLeads">Лиды</a>
+      <a href="/analytics" id="navAnalytics">Аналитика</a>
+      <a href="/sto" id="navSto" style="display:none">СТО</a>
+      <button type="button" class="nav-logout" id="navLogout">Завершить сеанс</button>
+    </nav>
+  </header>
+  <main>
+    <p class="sp-note">
+      Список файлов с шары <strong>sprecord_arch</strong> (корень <code>/mnt/sprecord</code>), имя вида
+      <code>ГГГГ_ММ_ДД_ЧЧ_ММ_СС_…</code> — дата в календаре должна соответствовать дате в имени файла.
+      Сверяйте дату и время с сессией на странице <a href="/voice-transfers">«Переводы бота»</a>.
+      Прослушивание — кнопка <strong>«Слушать»</strong> (файл подгружается через запрос с сессией; встроенный <code>src</code> у плеера без cookie часто не воспроизводится).
+      Лимит строк на запрос ограничен; при большом дне сузьте диапазон дат.
+    </p>
+    <section class="filters">
+      <div class="filter-row">
+        <div class="filter-field">
+          <label>С даты: <input type="date" id="dateFrom"></label>
+          <label> по: <input type="date" id="dateTo"></label>
+        </div>
+        <div class="filter-field">
+          <label>Макс. строк: <input type="number" id="rowLimit" value="800" min="1" max="5000" style="width:5rem;"></label>
+        </div>
+        <button type="button" id="applyBtn">Загрузить список</button>
+      </div>
+    </section>
+    <p id="metaLine" class="sp-note" style="display:none;"></p>
+    <section class="table-wrap">
+      <table id="filesTable">
+        <thead>
+          <tr>
+            <th class="vb-row-num">№</th>
+            <th>Дата и время (из имени)</th>
+            <th>ID (суффикс)</th>
+            <th>Имя файла</th>
+            <th>Размер</th>
+            <th>Прослушать</th>
+          </tr>
+        </thead>
+        <tbody id="filesBody"></tbody>
+      </table>
+      <p class="sp-note" style="margin-top:0.75rem;">Общий плеер (после нажатия «Слушать» в строке):</p>
+      <audio id="spSharedPlayer" controls preload="none" style="display:none;width:100%;max-width:560px;"></audio>
+    </section>
+    <p id="err" class="error"></p>
+  </main>
+  <script>
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/"/g, '&quot;');
+    }
+    function fmtBytes(n) {
+      if (n == null || !Number.isFinite(Number(n))) return '—';
+      var b = Number(n);
+      if (b < 1024) return b + ' B';
+      if (b < 1048576) return (b / 1024).toFixed(1) + ' КБ';
+      return (b / 1048576).toFixed(2) + ' МБ';
+    }
+    document.getElementById('navLogout').onclick = async function() {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+      window.location.href = '/login';
+    };
+
+    var serverCfg = null;
+    function todayStr() {
+      if (serverCfg && serverCfg.today) return serverCfg.today;
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    const dateFrom = document.getElementById('dateFrom');
+    const dateTo = document.getElementById('dateTo');
+    const rowLimit = document.getElementById('rowLimit');
+    const applyBtn = document.getElementById('applyBtn');
+    const filesBody = document.getElementById('filesBody');
+    const metaLine = document.getElementById('metaLine');
+    const errEl = document.getElementById('err');
+    const spSharedPlayer = document.getElementById('spSharedPlayer');
+    var spPlayerBlobUrl = null;
+
+    filesBody.addEventListener('click', function(ev) {
+      var btn = ev.target.closest('.btn-play-sp');
+      if (!btn || btn.disabled) return;
+      var relEnc = btn.getAttribute('data-rel');
+      if (!relEnc) return;
+      var rel;
+      try {
+        rel = decodeURIComponent(relEnc);
+      } catch (e) {
+        errEl.textContent = 'Неверная кодировка пути к файлу.';
+        return;
+      }
+      var url = '/api/sprecord/browse/audio?rel_path=' + encodeURIComponent(rel);
+      var origText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '…';
+      errEl.textContent = '';
+      fetch(url, { credentials: 'same-origin' })
+        .then(function(r) {
+          if (r.status === 401 || r.status === 403) {
+            window.location.href = '/login';
+            return null;
+          }
+          if (!r.ok) {
+            return r.text().then(function(t) {
+              var msg = t || r.statusText;
+              try {
+                var j = JSON.parse(t);
+                if (j && j.detail) msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+              } catch (_) {}
+              throw new Error(msg);
+            });
+          }
+          return r.blob();
+        })
+        .then(function(blob) {
+          if (blob == null) return;
+          if (!blob.size) throw new Error('файл 0 байт');
+          if (spPlayerBlobUrl) {
+            URL.revokeObjectURL(spPlayerBlobUrl);
+            spPlayerBlobUrl = null;
+          }
+          spPlayerBlobUrl = URL.createObjectURL(blob);
+          spSharedPlayer.src = spPlayerBlobUrl;
+          spSharedPlayer.style.display = 'block';
+          // Сразу play() после fetch часто падает (данные ещё не в буфере; автозапуск). Ждём canplay.
+          var onAudioErr = function() {
+            spSharedPlayer.removeEventListener('canplay', onCanPlay);
+            spSharedPlayer.removeEventListener('error', onAudioErr);
+            errEl.textContent = 'Аудио: файл не воспроизводится (формат или повреждённая запись).';
+          };
+          var onCanPlay = function() {
+            spSharedPlayer.removeEventListener('canplay', onCanPlay);
+            spSharedPlayer.removeEventListener('error', onAudioErr);
+            spSharedPlayer.play().catch(function(err) {
+              if (err && err.name === 'NotAllowedError') {
+                errEl.textContent = 'Нажмите «Play» на плеере ниже — браузер ограничил автозапуск.';
+              } else {
+                errEl.textContent = 'Воспроизведение: ' + (err && err.message ? err.message : String(err));
+              }
+            });
+          };
+          spSharedPlayer.addEventListener('error', onAudioErr, { once: true });
+          spSharedPlayer.addEventListener('canplay', onCanPlay, { once: true });
+          spSharedPlayer.load();
+        })
+        .catch(function(e) {
+          errEl.textContent = 'Аудио: ' + (e.message || String(e));
+        })
+        .then(function() {
+          btn.disabled = false;
+          btn.textContent = origText;
+        });
+    });
+
+    function loadList() {
+      errEl.textContent = '';
+      metaLine.style.display = 'none';
+      filesBody.innerHTML = '';
+      var df = dateFrom.value;
+      var dt = dateTo.value || df;
+      if (!df) {
+        errEl.textContent = 'Укажите дату «с».';
+        return;
+      }
+      var lim = parseInt(String(rowLimit.value), 10);
+      if (!Number.isFinite(lim) || lim < 1) lim = 800;
+      var url = '/api/sprecord/browse/files?date_from=' + encodeURIComponent(df)
+        + '&date_to=' + encodeURIComponent(dt)
+        + '&limit=' + encodeURIComponent(String(lim));
+      fetch(url, { credentials: 'same-origin' })
+        .then(function(r) {
+          if (r.status === 401 || r.status === 403) {
+            window.location.href = '/login';
+            return null;
+          }
+          return r.json().then(function(j) {
+            if (!r.ok) {
+              var det = j && j.detail;
+              if (Array.isArray(det)) det = det.map(function(x) { return x.msg || String(x); }).join('; ');
+              throw new Error(det || r.statusText);
+            }
+            return j;
+          });
+        })
+        .then(function(data) {
+          if (data == null) return;
+          var rows = Array.isArray(data.files) ? data.files : [];
+          var cnt = data.count != null ? data.count : rows.length;
+          metaLine.textContent = 'Найдено записей: ' + cnt + '. Корень: ' + (data.root || '—');
+          metaLine.style.display = 'block';
+          if (rows.length === 0) {
+            var diag = data.diagnostic || {};
+            var diagHtml = '';
+            if (diag.sample_glob != null) {
+              diagHtml = '<br><span style="font-size:0.92rem;color:#333;">Диагностика: корень <code>'
+                + esc(String(diag.root || '')) + '</code>, существует: ' + esc(String(diag.exists))
+                + ', маска <code>' + esc(String(diag.sample_glob)) + '</code>, '
+                + 'совпадений в корне: ' + esc(diag.found_in_root === true ? 'да (пример: ' + (diag.example || '') + ')' : 'нет');
+              if (diag.glob_error) diagHtml += ', ошибка glob: ' + esc(String(diag.glob_error));
+              diagHtml += '.</span>';
+              if (diag.exists && diag.found_in_root !== true) {
+                diagHtml += '<br><span style="font-size:0.92rem;color:#555;">Если на <strong>хосте</strong> в shell есть файлы по маске <code>ls /mnt/sprecord/' + esc(String(diag.sample_glob || '')) + '</code>, а здесь «нет» — проверьте том <code>/mnt/sprecord</code> у сервиса <strong>admin-panel</strong> в Docker (<code>docker compose</code>).</span>';
+              }
+            }
+            var emptyTr = document.createElement('tr');
+            emptyTr.innerHTML = '<td colspan="6" style="padding:1rem 0.75rem;color:#444;line-height:1.5;">'
+              + '<strong>За выбранные даты в корне шары не найдено wav/mp3</strong> с префиксом <code>ГГГГ_ММ_ДД_</code> в имени файла.'
+              + diagHtml
+              + '<br>Проверьте диапазон дат и нажмите «Загрузить список» снова.</td>';
+            filesBody.appendChild(emptyTr);
+            return;
+          }
+          var n = 1;
+          for (var i = 0; i < rows.length; i++) {
+            var f = rows[i];
+            var rel = f.rel_path || '';
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td class="vb-row-num">' + (n++) + '</td>'
+              + '<td>' + esc(f.started_at_display) + '</td>'
+              + '<td class="mono">' + esc(f.id_suffix) + '</td>'
+              + '<td class="mono" title="' + esc(rel) + '">' + esc(f.name) + '</td>'
+              + '<td>' + esc(fmtBytes(f.size)) + '</td>'
+              + '<td><button type="button" class="btn-play-sp" data-rel="' + encodeURIComponent(rel) + '">Слушать</button></td>';
+            filesBody.appendChild(tr);
+          }
+        })
+        .catch(function(e) {
+          errEl.textContent = 'Ошибка: ' + (e.message || String(e));
+        });
+    }
+
+    fetch('/api/admin_config', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(cfg) {
+        serverCfg = cfg;
+        var t = todayStr();
+        dateFrom.value = t;
+        dateTo.value = t;
+        loadList();
+      })
+      .catch(function() {
+        var t = todayStr();
+        dateFrom.value = t;
+        dateTo.value = t;
+      });
+    applyBtn.onclick = loadList;
+  </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+---
+description: Защита ключевых файлов проекта Vikingi — не удалять без явного разрешения
+alwaysApply: true
+---
+
+# Защита ключевых файлов Vikingi (server7)
+
+## Запрещено без явного разрешения пользователя
+
+**Удалять, переименовывать** или вносить **крупные изменения** в следующие файлы и каталоги:
+
+### Документация и архитектура
+- `DOCS.md` — индекс документации
+- `PROJECT_STATUS.md` — описание архитектуры (Asterisk, RTP, бот, 1С)
+- `PROJECT_STATUS_SUMMARY.md` — статус проекта
+- `DEPLOYMENT_GUIDE.md` — развёртывание
+- `CALL_ANALYTICS_SPEC.md` — спецификация аналитики звонков
+
+### Конфигурация и оркестрация
+- `docker-compose.yml`
+- `Dockerfile.*` (Dockerfile.stt, Dockerfile.tts, Dockerfile.app, Dockerfile.voice)
+- `config.py`, `postgresql_config.py`
+- `create_database_schema.sql`
+
+### Сервисы (services/)
+- `services/stt/` — STT-сервис (GigaAM/Whisper)
+- `services/voice/` — голосовой бот
+- `services/tts/` — TTS
+
+### Приложения
+- `admin_panel/` — админка
+- `telegram_bot/` — телеграм-бот
+- `dialog/` — логика диалога, RAG
+
+### Инфраструктура
+- `asterisk/` — телефония (Dockerfile, conf, entrypoint)
+- `licensing/` — лицензирование
+- `database/` — PostgreSQL, миграции
+- `call_analytics/` — аналитика звонков
+
+### Скрипты запуска и настройки
+- `setup_network.sh`
+- `run_local.sh`, `run_telegram_bot.sh`
+- `vikingi_manage.sh` (если есть)
+
+### Аналитика и STT
+- `analyze_call_quality.py`, `analyze_op_mono.py`, `analyze_sto_quality.py`, `analyze_sto_mono.py`
+- `text_normalization.py`, `transfer_tone_mask.py`
+
+## Обязательно
+
+Перед удалением или переименованием **любого** из перечисленных файлов — спрашивать: «Могу ли я удалить/переименовать X?» и ждать явного «да» или «удали».
+
+## Исключения
+
+- Допускаются **редактирования** (добавление кода, исправления) по запросу пользователя
+- Мелкие правки в docker-compose (env, volume, порт) — если пользователь явно попросил
+- Экспериментальные скрипты в `experiments/` — менее критичны, но лучше спросить

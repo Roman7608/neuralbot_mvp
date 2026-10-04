@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+*.md
+*.log
+Analytic/
+*.xlsx
+.env
+.cursor/
+node_modules/
+license_tools/
+private_key.pem
+.license_last_check

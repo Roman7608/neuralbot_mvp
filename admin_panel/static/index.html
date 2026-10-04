@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Аналитика звонков — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Аналитика звонков</h1>
+    <p id="classifierMode" style="display:none;font-size:0.9rem;color:#555;margin:0.25rem 0 0.5rem;"></p>
+    <nav>
+      <a href="/" class="nav-active">Звонки</a>
+      <a href="/upload" id="navUpload">Загрузка</a>
+      <a href="/leads">Лиды</a>
+      <a href="/analytics" id="navAnalytics">Аналитика</a>
+      <a href="/body-calls" id="navBodyCalls" style="display:none">Кузовной цех</a>
+      <a href="/voice-transfers" id="navVoiceBot" style="display:none">Переводы бота</a>
+      <a href="/sto" id="navSto" style="display:none">СТО</a>
+      <button type="button" class="nav-logout" id="navLogout">Завершить сеанс</button>
+    </nav>
+  </header>
+  <main>
+    <section class="filters">
+      <div class="filter-row">
+        <div class="filter-field"><label>Период: <input type="date" id="dateFrom"> — <input type="date" id="dateTo"></label></div>
+        <div class="filter-field"><label>Отдел: <select id="department"><option value="">Все</option><option value="OP">Отдел Продаж</option><option value="STO">СТО</option><option value="OTHER">Прочие</option></select></label></div>
+        <div class="filter-field"><label id="managerLabel">Менеджер: <select id="manager"><option value="">Все</option></select></label></div>
+        <div class="filter-field"><label>Вид: <select id="callType"><option value="">Все</option><option value="OP_IN">ОП входящие</option><option value="OP_OUT">ОП исходящие</option><option value="STO_IN">СТО вход</option><option value="STO_OUT">СТО исход</option><option value="OTHER">Прочие</option></select></label></div>
+        <div class="filter-field" id="stoViewModeWrap" style="display:none"><label>Режим СТО: <select id="stoViewMode"><option value="broad">Широкий</option><option value="narrow" selected>Узкий</option></select></label></div>
+        <div class="filter-field"><label>Время: <select id="workingHours">
+          <option value="">Все</option>
+          <option value="working">Рабочее (8:00–20:00)</option>
+          <option value="non_working">Нерабочее (20:00–8:00)</option>
+        </select></label></div>
+        <div class="filter-field" id="stoRubricFilterWrap" style="display:none"><label><input type="checkbox" id="stoToRubricOnly"> Только чек-лист записи на ТО (STO_TO)</label></div>
+        <button type="button" id="applyFilters">Применить</button>
+      </div>
+    </section>
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-id" title="Идентификатор звонка">ID</th>
+            <th>Дата</th>
+            <th>Время</th>
+            <th>Номер</th>
+            <th>Отдел</th>
+            <th>Тип</th>
+            <th title="Узкий слой: СТО_ТО_вх, СТО_ТО_исх или не ТО (только для отдела СТО)">Узкий СТО_ТО</th>
+            <th>Источник</th>
+            <th>Балл</th>
+            <th>Статус</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="callsBody"></tbody>
+      </table>
+    </section>
+    <nav id="pagination" class="pagination" style="display:none;">
+      <button type="button" id="prevPage">← Назад</button>
+      <span id="pageInfo"></span>
+      <button type="button" id="nextPage">Вперёд →</button>
+    </nav>
+    <p id="loading">Загрузка…</p>
+    <p id="error" class="error"></p>
+  </main>
+  <script src="/static/app.js"></script>
+  <script>
+    (function() {
+      function parseAdminRoleId() {
+        const v = window.ADMIN_ROLE_ID;
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        const n = parseInt(String(v), 10);
+        return Number.isFinite(n) ? n : null;
+      }
+      const roleId = parseAdminRoleId();
+      if (roleId == null) {
+        const er = document.getElementById('error');
+        if (er) er.textContent = 'Не удалось определить роль. Откройте «Звонки» по ссылке после входа (не открывайте /static/index.html напрямую).';
+      }
+      if (roleId === 8) {
+        const nv = document.getElementById('navVoiceBot');
+        if (nv) nv.style.display = 'inline';
+      }
+      if (roleId === 5 || roleId === 6 || roleId === 8) {
+        const nb = document.getElementById('navBodyCalls');
+        if (nb) nb.style.display = 'inline';
+      }
+      if (roleId != null && roleId <= 3) {
+        document.getElementById('navUpload').style.display = 'none';
+        document.getElementById('navAnalytics').style.display = 'none';
+      }
+      if (roleId === 2 || roleId >= 5) document.getElementById('navSto').style.display = 'inline';
+      document.getElementById('navLogout').onclick = async function() {
+        try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+        window.location.href = '/login';
+      };
+      const deptSelect = document.getElementById('department');
+      const callTypeSelect = document.getElementById('callType');
+      const stoViewModeWrap = document.getElementById('stoViewModeWrap');
+      const stoViewModeSelect = document.getElementById('stoViewMode');
+      function isStoRole() {
+        return roleId === 2 || roleId === 5 || roleId === 6 || roleId === 8;
+      }
+      function isStoDeptSelected() {
+        return (deptSelect && deptSelect.value === 'STO') || roleId === 2 || roleId === 5;
+      }
+      function updateStoViewModeVisibility() {
+        if (!stoViewModeWrap) return;
+        stoViewModeWrap.style.display = (isStoRole() && isStoDeptSelected()) ? 'block' : 'none';
+      }
+      if (roleId === 1 || roleId === 4) {
+        deptSelect.innerHTML = '<option value="OP">Отдел Продаж</option>';
+        callTypeSelect.innerHTML = '<option value="">Все</option><option value="OP_IN">ОП входящие</option><option value="OP_OUT">ОП исходящие</option>';
+      } else if (roleId === 2 || roleId === 5) {
+        deptSelect.innerHTML = '<option value="STO">СТО</option>';
+        deptSelect.value = 'STO';
+        function updateCallTypesStoOther() {
+          const dept = 'STO';
+          const mode = (stoViewModeSelect && stoViewModeSelect.value) || 'broad';
+          const prev = callTypeSelect.value;
+          if (dept === 'STO' && mode === 'narrow') {
+            callTypeSelect.innerHTML =
+              '<option value="">Все</option><option value="STO_TO_IN">СТО_ТО_вх.</option><option value="STO_TO_OUT">СТО_ТО_исх.</option><option value="STO_NARROW_OTHER">не ТО</option>';
+          } else if (dept === 'STO') {
+            callTypeSelect.innerHTML =
+              '<option value="">Все</option><option value="STO_IN">СТО вход</option><option value="STO_OUT">СТО исход</option><option value="OTHER">Прочие</option>';
+          } else if (dept === 'OTHER') {
+            callTypeSelect.innerHTML = '<option value="">Все</option><option value="OTHER">Прочие</option>';
+          }
+          if (!callTypeSelect.querySelector('option[value="' + prev + '"]')) callTypeSelect.value = '';
+          updateStoViewModeVisibility();
+        }
+        deptSelect.addEventListener('change', function() {
+          updateCallTypesStoOther();
+          loadManagers();
+        });
+        if (stoViewModeSelect) stoViewModeSelect.addEventListener('change', updateCallTypesStoOther);
+        updateCallTypesStoOther();
+      } else if (roleId === 6 || roleId === 8) {
+        const deptOtherOpt = roleId === 8 ? '<option value="OTHER">Прочие</option>' : '';
+        deptSelect.innerHTML = '<option value="">Все</option><option value="OP">Отдел Продаж</option><option value="STO">СТО</option>' + deptOtherOpt;
+        function updateCallTypes() {
+          const dept = deptSelect.value;
+          const mode = (stoViewModeSelect && stoViewModeSelect.value) || 'broad';
+          const prev = callTypeSelect.value;
+          if (dept === 'OP') callTypeSelect.innerHTML = '<option value="">Все</option><option value="OP_IN">ОП входящие</option><option value="OP_OUT">ОП исходящие</option>';
+          else if (dept === 'STO' && mode === 'narrow') callTypeSelect.innerHTML = '<option value="">Все</option><option value="STO_TO_IN">СТО_ТО_вх.</option><option value="STO_TO_OUT">СТО_ТО_исх.</option><option value="STO_NARROW_OTHER">не ТО</option>';
+          else if (dept === 'STO') callTypeSelect.innerHTML = '<option value="">Все</option><option value="STO_IN">СТО вход</option><option value="STO_OUT">СТО исход</option><option value="OTHER">Прочие</option>';
+          else if (dept === 'OTHER' && roleId === 8) callTypeSelect.innerHTML = '<option value="">Все</option><option value="OTHER">Прочие</option>';
+          else callTypeSelect.innerHTML = '<option value="">Все</option><option value="OP_IN">ОП входящие</option><option value="OP_OUT">ОП исходящие</option><option value="STO_IN">СТО вход</option><option value="STO_OUT">СТО исход</option><option value="OTHER">Прочие</option>';
+          if (!callTypeSelect.querySelector('option[value="' + prev + '"]')) callTypeSelect.value = '';
+          updateStoViewModeVisibility();
+        }
+        deptSelect.addEventListener('change', updateCallTypes);
+        if (stoViewModeSelect) stoViewModeSelect.addEventListener('change', updateCallTypes);
+        updateCallTypes();
+      }
+      if (roleId == null) {
+        deptSelect.disabled = true;
+        callTypeSelect.disabled = true;
+        const ap = document.getElementById('applyFilters');
+        if (ap) ap.disabled = true;
+      }
+      function runWithServerDates(cfg) {
+      cfg = cfg || {};
+      const today = cfg.today || new Date().toISOString().slice(0, 10);
+      const yesterday = cfg.yesterday || new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+      const cm = document.getElementById('classifierMode');
+      if (cm) {
+        if (cfg.transcript_classifier === 'legacy') {
+          cm.style.display = 'block';
+          cm.textContent = 'Классификация по транскрипту: legacy (запасной монолит; v2 — снимите VIKINGI_CLASSIFY_LEGACY).';
+        } else {
+          cm.style.display = 'block';
+          cm.textContent = 'Классификация по транскрипту: v2 (главный движок; откат — VIKINGI_CLASSIFY_LEGACY=1).';
+        }
+      }
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('date_from')) document.getElementById('dateFrom').value = urlParams.get('date_from');
+      else document.getElementById('dateFrom').value = yesterday;
+      if (urlParams.has('date_to')) document.getElementById('dateTo').value = urlParams.get('date_to');
+      else document.getElementById('dateTo').value = today;
+      if (urlParams.has('department') && deptSelect.querySelector('option[value="' + urlParams.get('department') + '"]')) {
+        deptSelect.value = urlParams.get('department');
+        deptSelect.dispatchEvent(new Event('change'));
+      }
+      const rubFromUrl = urlParams.get('sto_narrow_rubric');
+      let ctFromUrl = urlParams.get('call_type');
+      const modeFromUrl = urlParams.get('sto_view_mode');
+      if (stoViewModeSelect && (modeFromUrl === 'broad' || modeFromUrl === 'narrow')) {
+        stoViewModeSelect.value = modeFromUrl;
+        stoViewModeSelect.dispatchEvent(new Event('change'));
+      }
+      updateStoViewModeVisibility();
+      if (rubFromUrl && callTypeSelect.querySelector('option[value="' + rubFromUrl + '"]')) {
+        callTypeSelect.value = rubFromUrl;
+      } else if (urlParams.has('call_type') && callTypeSelect.querySelector('option[value="' + ctFromUrl + '"]')) {
+        callTypeSelect.value = ctFromUrl;
+      }
+      const managerSelect = document.getElementById('manager');
+      let managersLoaded = false;
+      function loadManagers() {
+        const dept = deptSelect.value || '';
+        fetch('/api/calls/managers?department=' + encodeURIComponent(dept), { cache: 'no-store' })
+          .then(r => r.json())
+          .then(rows => {
+            const prev = managerSelect.value;
+            managerSelect.innerHTML = '<option value="">Все</option>';
+            rows.forEach(r => {
+              const opt = document.createElement('option');
+              opt.value = r.manager_name || '';
+              opt.textContent = r.display || r.manager_name || '';
+              managerSelect.appendChild(opt);
+            });
+            const setIfExists = function(val) {
+              for (const o of managerSelect.options) { if (o.value === val) { managerSelect.value = val; return true; } }
+              return false;
+            };
+            if (prev) setIfExists(prev);
+            else if (!managersLoaded && urlParams.has('manager_name')) {
+              setIfExists(urlParams.get('manager_name') || '');
+              managersLoaded = true;
+            }
+          })
+          .catch(() => { managerSelect.innerHTML = '<option value="">Все</option>'; });
+      }
+      if (roleId === 6 || roleId === 8) {
+        deptSelect.addEventListener('change', function() {
+          loadManagers();
+          if (typeof updateCallTypes === 'function') updateCallTypes();
+        });
+      }
+      loadManagers();
+      const workingHoursSelect = document.getElementById('workingHours');
+      if (urlParams.has('working_hours') && workingHoursSelect) workingHoursSelect.value = urlParams.get('working_hours') || '';
+      function updateStoRubricFilterVisibility() {
+        const wrap = document.getElementById('stoRubricFilterWrap');
+        const ds = document.getElementById('department');
+        const stoOnly = document.getElementById('stoToRubricOnly');
+        const mode = (stoViewModeSelect && stoViewModeSelect.value) || 'broad';
+        const isSto = !!(ds && ds.value === 'STO');
+        if (wrap) wrap.style.display = (isSto && mode === 'broad') ? 'block' : 'none';
+        if (stoOnly && mode === 'narrow') stoOnly.checked = false;
+      }
+      updateStoRubricFilterVisibility();
+      const deptEl = document.getElementById('department');
+      if (deptEl) deptEl.addEventListener('change', updateStoRubricFilterVisibility);
+      if (stoViewModeSelect) stoViewModeSelect.addEventListener('change', updateStoRubricFilterVisibility);
+      const tbody = document.getElementById('callsBody');
+      const loading = document.getElementById('loading');
+      const errEl = document.getElementById('error');
+      const pagination = document.getElementById('pagination');
+      const prevBtn = document.getElementById('prevPage');
+      const nextBtn = document.getElementById('nextPage');
+      const pageInfo = document.getElementById('pageInfo');
+      const PAGE_SIZE = 100;
+      let currentOffset = 0;
+      function renderList(offset) {
+        if (offset === undefined) offset = 0;
+        currentOffset = offset;
+        loading.style.display = 'block';
+        errEl.textContent = '';
+        const params = new URLSearchParams();
+        const wh = document.getElementById('workingHours');
+        const df = document.getElementById('dateFrom').value;
+        const dt = document.getElementById('dateTo').value;
+        const dept = document.getElementById('department').value;
+        const mgr = document.getElementById('manager') && document.getElementById('manager').value;
+        const ct = document.getElementById('callType').value;
+        const narrowSto = ct === 'STO_TO_IN' || ct === 'STO_TO_OUT' || ct === 'STO_NARROW_OTHER';
+        const stoViewMode = (stoViewModeSelect && stoViewModeSelect.value) || 'broad';
+        params.set('order', 'asc');
+        params.set('call_source', 'sprecord');
+        if (wh && wh.value) params.set('working_hours', wh.value);
+        const stoOnly = document.getElementById('stoToRubricOnly');
+        if (stoOnly && stoOnly.checked) params.set('sto_to_rubric_only', 'true');
+        if (df) params.set('date_from', df);
+        if (dt) params.set('date_to', dt);
+        if (roleId === 2 || roleId === 5) {
+          params.set('department', 'STO');
+        } else if (dept) {
+          params.set('department', dept);
+        }
+        if ((roleId === 2 || roleId === 5 || dept === 'STO') && (stoViewMode === 'broad' || stoViewMode === 'narrow')) {
+          params.set('sto_view_mode', stoViewMode);
+        }
+        if (mgr) params.set('manager_name', mgr);
+        if (ct && narrowSto) {
+          params.set('sto_narrow_rubric', ct);
+        } else if (ct) {
+          params.set('call_type', ct);
+        }
+        params.set('limit', String(PAGE_SIZE));
+        params.set('offset', String(offset));
+        const newUrl = (params.toString() ? '/?' + params.toString() : '/');
+        if (window.location.pathname + (window.location.search || '') !== newUrl) {
+          history.replaceState(null, '', newUrl);
+        }
+        fetch('/api/calls?' + params, { cache: 'no-store' }).then(r => {
+          return r.json().then(data => {
+            if (!r.ok) {
+              throw new Error(data && data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : r.statusText || 'Ошибка сервера');
+            }
+            return data;
+          });
+        }).then(data => {
+          loading.style.display = 'none';
+          errEl.textContent = '';
+          const rows = Array.isArray(data) ? data : [];
+          tbody.innerHTML = rows.map(r => {
+            const excl = r.excluded ? ' class="row-excluded"' : '';
+            const exclBadge = r.excluded ? ' <span class="badge-excluded-sm">скрыт</span>' : '';
+            const ctLabels = {OP_IN:'ОП вх.', OP_OUT:'ОП исх.', STO_IN:'СТО вх.', STO_OUT:'СТО исх.', OTHER:'Прочие'};
+            const ctText = ctLabels[r.call_type] || (r.call_type || '—');
+            let rub = '—';
+            if (r.department === 'STO' && (r.call_type === 'STO_IN' || r.call_type === 'STO_OUT')) {
+              if (r.sto_to_rubric_type === 'STO_TO_IN') rub = 'СТО_ТО_вх.';
+              else if (r.sto_to_rubric_type === 'STO_TO_OUT') rub = 'СТО_ТО_исх.';
+              else rub = 'не ТО';
+            }
+            return `
+            <tr${excl}>
+              <td class="col-id">${r.id}</td>
+              <td>${r.call_date || '-'}</td>
+              <td>${r.call_time ? String(r.call_time).slice(0,8) : '-'}</td>
+              <td>${(r.department === 'OTHER' && r.manager_name) ? r.manager_name : ((r.internal_number ?? '-') + (r.manager_name ? ' (' + r.manager_name + ')' : ''))}</td>
+              <td>${r.department === 'OP' ? 'Отдел Продаж' : (r.department === 'STO' ? 'СТО' : (r.department === 'OTHER' ? 'Прочие' : (r.department || '—')))}</td>
+              <td>${ctText}</td>
+              <td>${rub}</td>
+              <td>${r.source_type || 'manual'}</td>
+              <td>${r.overall_score != null ? Number(r.overall_score).toFixed(1) : '-'}</td>
+              <td>${(r.status || 'pending') + exclBadge}</td>
+              <td><a href="/call/${r.id}">Открыть</a></td>
+            </tr>`;
+          }).join('');
+          pagination.style.display = rows.length > 0 ? 'flex' : 'none';
+          if (rows.length > 0) {
+            const pageNum = Math.floor(offset / PAGE_SIZE) + 1;
+            pageInfo.textContent = `Страница ${pageNum} (звонки ${offset + 1}–${offset + rows.length})`;
+            prevBtn.disabled = offset === 0;
+            nextBtn.disabled = rows.length < PAGE_SIZE;
+            prevBtn.onclick = () => renderList(Math.max(0, offset - PAGE_SIZE));
+            nextBtn.onclick = () => renderList(offset + PAGE_SIZE);
+          }
+        }).catch(e => {
+          loading.style.display = 'none';
+          errEl.textContent = 'Ошибка: ' + e.message;
+          tbody.innerHTML = '';
+        });
+      }
+      document.getElementById('applyFilters').onclick = () => renderList(0);
+      renderList();
+      }
+      fetch('/api/admin_config', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (cfg) { runWithServerDates(cfg); })
+        .catch(function () { runWithServerDates({ transcript_classifier: 'v2' }); });
+    })();
+  </script>
+</body>
+</html>

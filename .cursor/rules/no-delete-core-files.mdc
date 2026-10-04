@@ -1,0 +1,18 @@
+---
+description: Запрет удаления ключевых исходных файлов проекта
+alwaysApply: true
+---
+
+# Запрет удаления ключевых файлов
+
+**НИКОГДА не удаляй и не предлагай удалить** следующие файлы и каталоги без явного запроса пользователя:
+
+- `admin_panel/main.py` — точка входа веб-админки
+- `database/postgresql_manager.py` — менеджер БД (AdminAuthDB, CallAnalyticsDB и др.)
+- `admin_panel/auth.py`, `admin_panel/create_admin_user.py`
+- `postgresql_config.py` — конфигурация подключения к PostgreSQL
+- Файлы в `admin_panel/static/` (HTML, JS, CSS)
+- Миграции в `database/migrations/*.sql`
+- Модули `call_analytics/`, `telegram_bot/`, `services/`
+
+При рефакторинге или «очистке» кода — **никогда** не предлагай удаление этих файлов. Если пользователь явно просит удалить — уточни, что именно и зачем.

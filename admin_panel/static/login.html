@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Вход в админку</h1>
+  </header>
+  <main>
+    <form id="loginForm" style="max-width: 320px;">
+      <p>
+        <label>Пользователь: <select name="login" id="loginSelect" required></select></label>
+      </p>
+      <p>
+        <label>Пароль: <input type="password" name="password" required autocomplete="current-password"></label>
+      </p>
+      <p id="error" class="error"></p>
+      <p><button type="submit">Войти</button></p>
+    </form>
+  </main>
+  <script>
+    fetch('/api/auth/logins').then(r => r.json()).then(function(data) {
+      const sel = document.getElementById('loginSelect');
+      (data.logins || []).forEach(function(login) {
+        const opt = document.createElement('option');
+        opt.value = login;
+        opt.textContent = login;
+        sel.appendChild(opt);
+      });
+      if (sel.options.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '— нет пользователей —';
+        sel.appendChild(opt);
+      }
+    }).catch(function() { document.getElementById('loginSelect').innerHTML = '<option value="">Ошибка загрузки</option>'; });
+    document.getElementById('loginForm').onsubmit = function(e) {
+      e.preventDefault();
+      const form = e.target;
+      if (!form.login.value) return;
+      const fd = new FormData();
+      fd.append('login', form.login.value);
+      fd.append('password', form.password.value);
+      const errEl = document.getElementById('error');
+      errEl.textContent = '';
+      fetch('/api/auth/login', { method: 'POST', body: fd })
+        .then(function(r) {
+          if (r.ok) return r.json();
+          if (r.status === 401) throw new Error('Неверный логин или пароль');
+          throw new Error('Ошибка ' + r.status);
+        })
+        .then(function(data) {
+          window.location.href = '/';
+        })
+        .catch(function(err) {
+          errEl.textContent = err.message;
+        });
+    };
+  </script>
+</body>
+</html>

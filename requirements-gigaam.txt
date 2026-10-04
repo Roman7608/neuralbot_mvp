@@ -1,0 +1,16 @@
+# Зависимости для GigaAM-v3 (ai-sage/GigaAM-v3)
+# Установка: pip install -r requirements-gigaam.txt
+# pandas — нужен для analyze_call_quality.py (импорт на уровне модуля)
+# Предзагрузка (один раз при интернете): python download_gigaam.py
+# Использование: python analyze_call_quality.py (GigaAM по умолчанию)
+# Откат на Whisper: USE_WHISPER=1 python analyze_call_quality.py
+
+pandas>=2.0.0
+transformers>=4.40.0
+torch
+torchaudio
+sentencepiece
+accelerate
+hydra-core
+omegaconf
+huggingface_hub

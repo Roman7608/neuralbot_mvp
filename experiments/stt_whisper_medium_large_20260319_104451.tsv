@@ -1,0 +1,104 @@
+engine\twhisper_medium
+whisper_medium	H0_base	spk1_001.wav	Да.
+whisper_medium	H1_prompt	spk1_001.wav	Да.
+whisper_medium	H2_loud8db	spk1_001.wav	Да.
+whisper_medium	H3_trim	spk1_001.wav	Да.
+whisper_medium	H4_loudtrim+prompt	spk1_001.wav	Да.
+whisper_medium	H0_base	spk1_002.wav	Хорошо.
+whisper_medium	H1_prompt	spk1_002.wav	Хорошо.
+whisper_medium	H2_loud8db	spk1_002.wav	Хорошо.
+whisper_medium	H3_trim	spk1_002.wav	Прошу.
+whisper_medium	H4_loudtrim+prompt	spk1_002.wav	Прошу.
+whisper_medium	H0_base	spk1_003.wav	Хорошо.
+whisper_medium	H1_prompt	spk1_003.wav	Хорошо.
+whisper_medium	H2_loud8db	spk1_003.wav	Хорошо.
+whisper_medium	H3_trim	spk1_003.wav	Хорошо.
+whisper_medium	H4_loudtrim+prompt	spk1_003.wav	Хорошо.
+whisper_medium	H0_base	spk1_004.wav	Согласна.
+whisper_medium	H1_prompt	spk1_004.wav	Согласна.
+whisper_medium	H2_loud8db	spk1_004.wav	Согласна.
+whisper_medium	H3_trim	spk1_004.wav	Согласна.
+whisper_medium	H4_loudtrim+prompt	spk1_004.wav	Согласна.
+whisper_medium	H0_base	spk2_001.wav	Да.
+whisper_medium	H1_prompt	spk2_001.wav	Да.
+whisper_medium	H2_loud8db	spk2_001.wav	Да.
+whisper_medium	H3_trim	spk2_001.wav	Да.
+whisper_medium	H4_loudtrim+prompt	spk2_001.wav	Да.
+whisper_medium	H0_base	spk2_002.wav	Да.
+whisper_medium	H1_prompt	spk2_002.wav	Да.
+whisper_medium	H2_loud8db	spk2_002.wav	Да.
+whisper_medium	H3_trim	spk2_002.wav	Да.
+whisper_medium	H4_loudtrim+prompt	spk2_002.wav	Да.
+whisper_medium	H0_base	spk3_001.wav	да
+whisper_medium	H1_prompt	spk3_001.wav	да
+whisper_medium	H2_loud8db	spk3_001.wav	Да.
+whisper_medium	H3_trim	spk3_001.wav	Да.
+whisper_medium	H4_loudtrim+prompt	spk3_001.wav	Да.
+whisper_medium	H0_base	spk3_002.wav	Хорошо.
+whisper_medium	H1_prompt	spk3_002.wav	Хорошо.
+whisper_medium	H2_loud8db	spk3_002.wav	Хорошо.
+whisper_medium	H3_trim	spk3_002.wav	Хорошо.
+whisper_medium	H4_loudtrim+prompt	spk3_002.wav	Хорошо.
+whisper_medium	H0_base	spk3_003.wav	Согласен.
+whisper_medium	H1_prompt	spk3_003.wav	Согласен.
+whisper_medium	H2_loud8db	spk3_003.wav	Согласен.
+whisper_medium	H3_trim	spk3_003.wav	Я согласен.
+whisper_medium	H4_loudtrim+prompt	spk3_003.wav	Я согласен.
+whisper_medium	H0_base	spk3_004.wav	
+whisper_medium	H1_prompt	spk3_004.wav	
+whisper_medium	H2_loud8db	spk3_004.wav	
+whisper_medium	H3_trim	spk3_004.wav	КОНЕЦ
+whisper_medium	H4_loudtrim+prompt	spk3_004.wav	Удачи!
+
+engine\twhisper_large
+whisper_large	H0_base	spk1_001.wav	Да.
+whisper_large	H1_prompt	spk1_001.wav	Да.
+whisper_large	H2_loud8db	spk1_001.wav	Да.
+whisper_large	H3_trim	spk1_001.wav	Да.
+whisper_large	H4_loudtrim+prompt	spk1_001.wav	Да.
+whisper_large	H0_base	spk1_002.wav	Прошу.
+whisper_large	H1_prompt	spk1_002.wav	Прошу.
+whisper_large	H2_loud8db	spk1_002.wav	Прошу.
+whisper_large	H3_trim	spk1_002.wav	Субтитры сделал DimaTorzok
+whisper_large	H4_loudtrim+prompt	spk1_002.wav	Субтитры сделал DimaTorzok
+whisper_large	H0_base	spk1_003.wav	Хорошо.
+whisper_large	H1_prompt	spk1_003.wav	Хорошо.
+whisper_large	H2_loud8db	spk1_003.wav	Хорошо.
+whisper_large	H3_trim	spk1_003.wav	Хорошо.
+whisper_large	H4_loudtrim+prompt	spk1_003.wav	Хорошо.
+whisper_large	H0_base	spk1_004.wav	Согласна.
+whisper_large	H1_prompt	spk1_004.wav	Согласна.
+whisper_large	H2_loud8db	spk1_004.wav	Согласна.
+whisper_large	H3_trim	spk1_004.wav	Согласна.
+whisper_large	H4_loudtrim+prompt	spk1_004.wav	Согласна.
+whisper_large	H0_base	spk2_001.wav	Да.
+whisper_large	H1_prompt	spk2_001.wav	Да.
+whisper_large	H2_loud8db	spk2_001.wav	Да.
+whisper_large	H3_trim	spk2_001.wav	Да.
+whisper_large	H4_loudtrim+prompt	spk2_001.wav	Да.
+whisper_large	H0_base	spk2_002.wav	Да.
+whisper_large	H1_prompt	spk2_002.wav	Да.
+whisper_large	H2_loud8db	spk2_002.wav	Да.
+whisper_large	H3_trim	spk2_002.wav	Да.
+whisper_large	H4_loudtrim+prompt	spk2_002.wav	Да.
+whisper_large	H0_base	spk3_001.wav	Да.
+whisper_large	H1_prompt	spk3_001.wav	Да.
+whisper_large	H2_loud8db	spk3_001.wav	Да.
+whisper_large	H3_trim	spk3_001.wav	Да.
+whisper_large	H4_loudtrim+prompt	spk3_001.wav	Да.
+whisper_large	H0_base	spk3_002.wav	Хорошо.
+whisper_large	H1_prompt	spk3_002.wav	Хорошо.
+whisper_large	H2_loud8db	spk3_002.wav	Хорошо.
+whisper_large	H3_trim	spk3_002.wav	Хорошо.
+whisper_large	H4_loudtrim+prompt	spk3_002.wav	Хорошо.
+whisper_large	H0_base	spk3_003.wav	Согласен.
+whisper_large	H1_prompt	spk3_003.wav	Согласен.
+whisper_large	H2_loud8db	spk3_003.wav	Согласен.
+whisper_large	H3_trim	spk3_003.wav	Согласен.
+whisper_large	H4_loudtrim+prompt	spk3_003.wav	Согласен.
+whisper_large	H0_base	spk3_004.wav	
+whisper_large	H1_prompt	spk3_004.wav	
+whisper_large	H2_loud8db	spk3_004.wav	
+whisper_large	H3_trim	spk3_004.wav	Субтитры создавал DimaTorzok
+whisper_large	H4_loudtrim+prompt	spk3_004.wav	Субтитры создавал DimaTorzok
+

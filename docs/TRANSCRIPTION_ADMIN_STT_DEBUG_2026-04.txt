@@ -1,0 +1,81 @@
+Транскрибация из админки и отладка STT (server7)
+================================================
+Запись для продолжения работы. Каталог проекта: /home/vikingi/VikingiAll
+
+--- Как устроено ---
+
+1) Ручная загрузка из SPRecord (и с компьютера) только копирует wav и создаёт строку в calls.
+   Транскрипция НЕ запускается сама — на карточке звонка нужно нажать
+   «Запустить транскрибацию на GPU».
+
+2) Образ admin-panel (Dockerfile.app + requirements_docker.txt) — «лёгкий»:
+   в нём НЕТ faster-whisper и НЕТ локального GigaAM. Раньше при USE_GIGAAM=0
+   процесс падал с «Модуль faster-whisper не установлен».
+
+3) Решение: если задан STT_SERVICE_URL (в docker-compose у admin-panel:
+   http://stt-service:8001), админка шлёт файл на POST .../transcribe у stt-service
+   (httpx, priority=batch). Реальная модель — в контейнере stt-service (GigaAM на GPU).
+
+4) Проверка «ГПУ занят голосовым ботом» для админки отключена, когда задан
+   STT_SERVICE_URL (очередь на стороне stt-service).
+
+--- Изменённые файлы (кратко) ---
+
+- requirements_docker.txt — добавлен httpx
+- admin_panel/main.py:
+  * _transcribe_via_stt_service(), при STT_SERVICE_URL — HTTP к stt-service
+  * _segments_json_safe() — сегменты ответа STT перед сохранением в БД
+  * расширенный _serialize() — numpy, Decimal, nan/inf, bytes → JSON для ответа API
+  * после save_transcription: если нет tr_id — явная ошибка 500 с текстом
+  * process_call: detail при 500 не пустой (тип исключения, если str пустой)
+  * list_sprecord_files: дата по mtime ИЛИ по префиксу имени YYYY_MM_DD_
+- call_analytics/sprecord_filename.py — date_from_sprecord_filename() (общий с автозабором)
+- call_analytics/autofetch_sprecord.py — iter_files_for_date: mtime ИЛИ дата из имени (как админка)
+- admin_panel/static/call.html:
+  * doProcess: проверка HTTP status, показ detail; ответ читается как text + JSON.parse
+  * первый запуск транскрибации: FormData с department, call_type
+- services/stt/main.py:
+  * POST /transcribe и /transcribe/bytes: try/except → HTTP 500 с detail=str(ошибка),
+    плюс logger.exception (раньше необработанное исключение из worker давало «голый» 500)
+
+- docs/ADMIN_PANEL_CHANGES.txt — кратко только про админку
+- docs/SPRECORD_MOUNT_SERVER7.md — строка про критерий отбора автозабора
+
+--- Симптом: 500 на транскрибации ---
+
+По логам admin-panel видно:
+  httpx POST http://stt-service:8001/transcribe → HTTP/1.1 500
+Значит исключение внутри stt-service (или в его GPU worker). Смотреть логи STT:
+
+  cd /home/vikingi/VikingiAll
+  docker compose logs -f --tail 80 stt-service
+
+(нажать транскрибацию пока -f открыт; скопировать traceback)
+
+Хвост без follow после попытки:
+
+  docker compose logs stt-service --tail 120
+
+Админка (если нужно):
+
+  docker compose logs -f --tail 50 admin-panel
+
+--- Пересборка после правок кода ---
+
+  docker compose build admin-panel && docker compose up -d admin-panel
+  docker compose build stt-service && docker compose up -d stt-service
+
+После смены call.html — жёсткое обновление страницы в браузере (Ctrl+F5).
+
+--- Полезные напоминания ---
+
+- docker compose restart admin-panel — без скобок в конце команды
+- Cron 23:55: scripts/daily_sprecord_pipeline.sh — DATE=сегодня, автозабор за календарный день
+- Две шары SpRecord: sprecord_arch → /mnt/sprecord (wav); sprecord_DB — не подменять /mnt/sprecord для wav
+
+--- Завтра ---
+
+1) Пересобрать stt-service (если ещё не) и повторить транскрибацию — в UI должен появиться
+   осмысленный detail от STT.
+2) Если снова 500 — по логам stt-service определить: OOM GPU, ошибка модели, формат wav и т.д.
+3) Проверить, что stt-service healthy: docker compose ps, GET /health на порту 8001 при необходимости.

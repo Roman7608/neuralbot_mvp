@@ -1,0 +1,87 @@
+================================================================================
+VikingiAll — пересборка Docker Compose (шпаргалка)
+================================================================================
+Имена сервисов — как в docker-compose.yml. Выполнять из каталога с файлом
+docker-compose.yml (на server7 часто ~/VikingIAll — заглавная I в «IAll»;
+не путать с VikingiAll).
+
+Базовые команды (замените SERVICE на нужное имя из списка ниже):
+
+  cd ~/VikingIAll    # или ваш фактический путь к проекту
+
+  # Один сервис: пересобрать образ и поднять контейнер
+  docker compose build SERVICE && docker compose up -d SERVICE
+
+  # Несколько сервисов за раз
+  docker compose build SVC1 SVC2 && docker compose up -d SVC1 SVC2
+
+  # Весь стек: все сервисы из compose (долго, в т.ч. STT/TTS с GPU)
+  docker compose build && docker compose up -d
+
+  # Принудительно без кэша слоёв (редко нужно)
+  docker compose build --no-cache SERVICE && docker compose up -d SERVICE
+
+  # Статус и логи
+  docker compose ps
+  docker compose logs SERVICE --tail=80
+
+--------------------------------------------------------------------------------
+Список сервисов (корневой docker-compose.yml)
+--------------------------------------------------------------------------------
+  postgres          — БД (образ postgres:16, обычно не build)
+  redis             — Redis (образ redis:7, обычно не build)
+  stt-service       — распознавание речи (Dockerfile.stt, GPU)
+  tts-service       — синтез речи (Dockerfile.tts)
+  admin-panel       — веб-админка (Dockerfile.app)
+  telegram-bot      — только с профилем telegram (см. ниже)
+  max-bot           — MAX-бот (Dockerfile.app)
+  asterisk          — SIP (зависит от voice-bot healthy)
+  voice-bot         — голосовой бот (Dockerfile.voice)
+
+--------------------------------------------------------------------------------
+Типовые «куски» пайплайна (что пересобирать после правок)
+--------------------------------------------------------------------------------
+1) Только голосовой бот (dialog/, config.py, services/voice/, Dockerfile.voice):
+   docker compose build voice-bot && docker compose up -d voice-bot
+
+2) Голосовой бот + Asterisk (если менялись сценарии перевода и нужен рестарт пары):
+   docker compose build voice-bot && docker compose up -d voice-bot asterisk
+
+3) Цепочка голоса: STT + TTS + voice-bot (после правок STT/TTS или обоих):
+   docker compose build stt-service tts-service voice-bot
+   docker compose up -d stt-service tts-service voice-bot
+
+4) Только админка (admin_panel/, Dockerfile.app без max/telegram):
+   docker compose build admin-panel && docker compose up -d admin-panel
+
+5) MAX-бот:
+   docker compose build max-bot && docker compose up -d max-bot
+
+6) Telegram-бот (профиль «telegram»):
+   docker compose --profile telegram build telegram-bot
+   docker compose --profile telegram up -d telegram-bot
+
+7) Два приложения на одном Dockerfile.app (admin + max; после общих правок в app):
+   docker compose build admin-panel max-bot && docker compose up -d admin-panel max-bot
+
+--------------------------------------------------------------------------------
+Скрипт vikingi_manage.sh (из каталога проекта)
+--------------------------------------------------------------------------------
+  ./vikingi_manage.sh restart-one voice-bot stt-service
+  ./vikingi_manage.sh restart          # все сервисы compose restart (без build)
+  Пункт меню 7 — docker compose build (весь стек), затем опционально up -d
+
+  Важно: restart-one делает только «restart», без пересборки образа.
+  После смены кода в образе нужен именно build + up (см. выше).
+
+--------------------------------------------------------------------------------
+Полезно помнить
+--------------------------------------------------------------------------------
+  • postgres/redis обычно не пересобирают — это готовые образы.
+  • voice-bot в compose зависит от postgres, stt-service, tts-service (healthy).
+  • asterisk зависит от voice-bot (healthy); при сбое voice-bot asterisk может
+    не подняться — смотрите docker compose ps и logs voice-bot.
+
+================================================================================
+Конец шпаргалки
+================================================================================

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Звонок — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Карточка звонка</h1>
+    <nav><a href="/" id="backToList">← Звонки</a></nav>
+  </header>
+  <main id="main">
+    <p id="loading">Загрузка…</p>
+    <p id="error" class="error"></p>
+    <div id="content" style="display:none">
+      <section>
+        <h2>Информация</h2>
+        <p><strong>ID:</strong> <span id="callIdValue"></span> <strong>Файл:</strong> <span id="fileName"></span></p>
+        <p><strong>Дата:</strong> <span id="callDate"></span> <strong>Время:</strong> <span id="callTime"></span></p>
+        <p><strong>Номер:</strong> <span id="internalNumber"></span> <strong>Отдел:</strong> <span id="department"></span> <strong>Тип:</strong> <span id="callType"></span> <strong>Источник:</strong> <span id="sourceType"></span></p>
+        <p><strong>Длительность:</strong> <span id="duration"></span> с</p>
+        <p id="managerRow">
+          <strong>Менеджер:</strong>
+          <span id="managerName">—</span>
+          <span id="managerNameEdit" style="display:none">
+            <input type="text" id="managerNameInput" placeholder="Имя менеджера" style="width:200px">
+            <button type="button" id="managerNameSave" class="btn-small">Сохранить</button>
+            <button type="button" id="managerNameCancel" class="btn-small btn-secondary">Отмена</button>
+          </span>
+          <button type="button" id="managerNameEditBtn" class="btn-small btn-secondary" style="display:none">Изменить</button>
+        </p>
+        <p id="recategorizeRow" style="display:none">
+          <strong>Категория:</strong>
+          <select id="categorySelect">
+            <option value="OP:OP_IN">ОП вх.</option>
+            <option value="OP:OP_OUT">ОП исх.</option>
+            <option value="STO:STO_IN">СТО вх.</option>
+            <option value="OTHER:OTHER">Прочие</option>
+          </select>
+          <button type="button" id="recategorizeBtn" class="btn-small">Перевести и переоценить</button>
+          <span id="recategorizeStatus"></span>
+        </p>
+      </section>
+      <section>
+        <h2>Аудио</h2>
+        <p id="audioLoading" class="audio-status">Загрузка аудио…</p>
+        <audio id="audioPlayer" controls style="display:none;"></audio>
+        <p id="audioError" class="error" style="display:none;"></p>
+        <p><a id="audioDownloadLink" href="#" target="_blank" rel="noopener">Скачать аудио</a> (если плеер не воспроизводит — откройте ссылку в новой вкладке или сохраните файл)</p>
+      </section>
+      <section id="transcriptSection">
+        <h2>Транскрипция</h2>
+        <p id="processBlock" style="display:none;"><button type="button" id="runProcess">Запустить транскрибацию на GPU</button> <span id="processStatus"></span></p>
+        <p id="reprocessBlock" style="display:none;"><button type="button" id="runReprocess" class="btn-small btn-secondary">Перезапустить транскрибацию</button> <span id="reprocessStatus"></span></p>
+        <pre id="transcript"></pre>
+      </section>
+      <section id="scoresSection">
+        <h2>Оценка</h2>
+        <div id="scores"></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    (function() {
+      const ref = document.referrer;
+      if (ref && ref.startsWith(window.location.origin) && ref.includes('/') && !ref.includes('/call/')) {
+        try {
+          const u = new URL(ref);
+          if (u.pathname === '/' || u.pathname === '') document.getElementById('backToList').href = ref;
+        } catch (_) {}
+      }
+      const roleId = window.ADMIN_ROLE_ID || 6;
+      const canManage = roleId >= 4;
+      if (roleId <= 2) {
+        document.getElementById('transcriptSection').style.display = 'none';
+        document.getElementById('scoresSection').style.display = 'none';
+      }
+      if (canManage) {
+        document.getElementById('recategorizeRow').style.display = 'block';
+        document.getElementById('managerNameEditBtn').style.display = 'inline';
+      }
+      const callId = window.location.pathname.split('/call/')[1];
+      if (!callId) { document.getElementById('error').textContent = 'Нет ID звонка'; return; }
+      const loading = document.getElementById('loading');
+      const errEl = document.getElementById('error');
+      const content = document.getElementById('content');
+      fetch('/api/calls/' + callId).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(data => {
+        loading.style.display = 'none';
+        content.style.display = 'block';
+        document.getElementById('callIdValue').textContent = data.id ?? callId;
+        document.getElementById('fileName').textContent = data.file_name || '—';
+        document.getElementById('callDate').textContent = data.call_date || '-';
+        document.getElementById('callTime').textContent = data.call_time ? String(data.call_time).slice(0,8) : '-';
+        document.getElementById('internalNumber').textContent = data.internal_number ?? '-';
+        document.getElementById('department').textContent = data.department === 'OP' ? 'Отдел Продаж' : (data.department === 'STO' ? 'СТО' : (data.department === 'OTHER' ? 'Прочие' : (data.department || '—')));
+        const ctLabels = {OP_IN:'ОП вх.', OP_OUT:'ОП исх.', STO_IN:'СТО вх.', STO_OUT:'СТО исх.', OTHER:'Прочие'};
+        document.getElementById('callType').textContent = ctLabels[data.call_type] || data.call_type || '—';
+        document.getElementById('sourceType').textContent = data.source_type || 'manual';
+        document.getElementById('duration').textContent = data.duration_seconds ?? '-';
+
+        // Manager name
+        const mName = data.manager_name || '—';
+        document.getElementById('managerName').textContent = mName;
+        document.getElementById('managerNameInput').value = data.manager_name || '';
+        document.getElementById('managerNameEditBtn').onclick = function() {
+          document.getElementById('managerName').style.display = 'none';
+          this.style.display = 'none';
+          document.getElementById('managerNameEdit').style.display = 'inline';
+          document.getElementById('managerNameInput').focus();
+        };
+        document.getElementById('managerNameCancel').onclick = function() {
+          document.getElementById('managerNameEdit').style.display = 'none';
+          document.getElementById('managerName').style.display = 'inline';
+          document.getElementById('managerNameEditBtn').style.display = 'inline';
+        };
+        document.getElementById('managerNameSave').onclick = function() {
+          const newName = document.getElementById('managerNameInput').value.trim();
+          const fd = new FormData();
+          fd.append('manager_name', newName);
+          fetch('/api/calls/' + callId + '/manager-name', { method: 'PUT', body: fd })
+            .then(r => r.json())
+            .then(function(res) {
+              if (res.ok) {
+                document.getElementById('managerName').textContent = newName || '—';
+                document.getElementById('managerNameEdit').style.display = 'none';
+                document.getElementById('managerName').style.display = 'inline';
+                document.getElementById('managerNameEditBtn').style.display = 'inline';
+              }
+            });
+        };
+
+        // Перевести в другую категорию и переоценить
+        const catSelect = document.getElementById('categorySelect');
+        const recatBtn = document.getElementById('recategorizeBtn');
+        const recatStatus = document.getElementById('recategorizeStatus');
+        const catMap = { 'OP:OP_IN':'OP:OP_IN', 'OP:OP_OUT':'OP:OP_OUT', 'STO:STO_IN':'STO:STO_IN', 'OTHER:OTHER':'OTHER:OTHER',
+          'OP_IN':'OP:OP_IN', 'OP_OUT':'OP:OP_OUT', 'STO_IN':'STO:STO_IN', 'STO_OUT':'OTHER:OTHER' };
+        const currentCat = (data.department || '') + ':' + (data.call_type || '');
+        const selVal = catMap[currentCat] || catMap[data.call_type] || 'OP:OP_IN';
+        if (catSelect.querySelector('option[value="' + selVal + '"]')) catSelect.value = selVal;
+        if (!(data.transcription && data.transcription.transcription_text)) {
+          recatBtn.disabled = true;
+          recatBtn.title = 'Сначала запустите транскрибацию';
+        }
+        recatBtn.onclick = function() {
+          if (recatBtn.disabled) return;
+          const v = catSelect.value;
+          if (!v) return;
+          const [dept, ct] = v.split(':');
+          recatStatus.textContent = 'Идёт переоценка…';
+          const fd = new FormData();
+          fd.append('department', dept);
+          fd.append('call_type', ct);
+          fetch('/api/calls/' + callId + '/re-categorize', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(function(res) {
+              if (res.ok) {
+                recatStatus.textContent = 'Готово. Обновляю…';
+                window.location.reload();
+              } else {
+                recatStatus.textContent = res.detail || 'Ошибка';
+              }
+            })
+            .catch(function(e) {
+              recatStatus.textContent = 'Ошибка: ' + e.message;
+            });
+        };
+
+        // Audio
+        const audio = document.getElementById('audioPlayer');
+        const audioLoading = document.getElementById('audioLoading');
+        const audioError = document.getElementById('audioError');
+        const audioUrl = '/api/calls/' + callId + '/audio        document.getElementById('audioDownloadLink').href = audioUrl + '?raw=1';
+        function clearAudioError() {
+          audioError.style.display = 'none';
+          audioError.textContent = '';
+        }
+        fetch(audioUrl)
+          .then(function(r) { if (!r.ok) throw new Error(r.status); return r.blob(); })
+          .then(function(blob) {
+            audioLoading.style.display = 'none';
+            clearAudioError();
+            audio.src = URL.createObjectURL(blob);
+            audio.style.display = 'block';
+            audio.load();
+            audio.addEventListener('loadedmetadata', clearAudioError);
+            audio.addEventListener('canplay', clearAudioError);
+            audio.addEventListener('playing', clearAudioError);
+            audio.addEventListener('pause', function() {
+              if (!audio.error) clearAudioError();
+            });
+            audio.addEventListener('error', function() {
+              if (!audio.error) return;
+              audioError.style.display = 'block';
+              audioError.textContent = 'Ошибка декодирования аудио. Попробуйте «Скачать аудио» и открыть в плеере.';
+            });
+          })
+          .catch(function(e) {
+            audioLoading.style.display = 'none';
+            audioError.style.display = 'block';
+            audioError.textContent = 'Не удалось загрузить аудио: ' + e.message;
+          });
+
+        // Transcription
+        const tr = data.transcription;
+        document.getElementById('transcript').textContent = tr && tr.transcription_text ? tr.transcription_text : 'Нет транскрипции';
+        const q = data.quality_scores;
+        if (q) {
+          const parts = [];
+          if (q.overall_score != null) parts.push('Общий балл: ' + Number(q.overall_score).toFixed(2));
+          if (q.greeting_score != null) parts.push('Приветствие: ' + q.greeting_score);
+          if (q.detailed_evaluation) parts.push(JSON.stringify(q.detailed_evaluation, null, 2));
+          document.getElementById('scores').innerHTML = '<pre>' + parts.join('\n') + '</pre>';
+        } else {
+          document.getElementById('scores').textContent = 'Оценки ещё не готовы.';
+        }
+        const hasTranscription = tr && tr.transcription_text;
+        const processBlock = document.getElementById('processBlock');
+        const reprocessBlock = document.getElementById('reprocessBlock');
+        const runBtn = document.getElementById('runProcess');
+        const runReprocessBtn = document.getElementById('runReprocess');
+        const statusEl = document.getElementById('processStatus');
+        const reprocessStatusEl = document.getElementById('reprocessStatus');
+        function doProcess(fd, statusNode) {
+          statusNode.textContent = 'Идёт транскрибация на GPU…';
+          fetch('/api/calls/' + callId + '/process', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(function() {
+              statusNode.textContent = 'Готово. Обновляю страницу…';
+              window.location.reload();
+            })
+            .catch(function(err) {
+              statusNode.textContent = 'Ошибка: ' + err.message;
+            });
+        }
+        if (hasTranscription) {
+          processBlock.style.display = 'none';
+          if (canManage) {
+            reprocessBlock.style.display = 'block';
+            runReprocessBtn.onclick = function() {
+              if (!confirm('Перезапустить транскрибацию? Текущий текст и оценки будут заменены.')) return;
+              const fd = new FormData();
+              if (data.department) fd.append('department', data.department);
+              if (data.call_type) fd.append('call_type', data.call_type);
+              doProcess(fd, reprocessStatusEl);
+            };
+          }
+        } else {
+          processBlock.style.display = 'block';
+          runBtn.onclick = function() { doProcess(new FormData(), statusEl); };
+        }
+      }).catch(e => {
+        loading.style.display = 'none';
+        errEl.textContent = 'Ошибка: ' + e.message;
+      });
+    })();
+  </script>
+</body>
+</html>

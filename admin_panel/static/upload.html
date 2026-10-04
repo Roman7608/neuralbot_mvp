@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Загрузка аудио — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .upload-mode { display: flex; gap: 1rem; margin-bottom: 1rem; }
+    .upload-mode label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+    .upload-section { margin-bottom: 1.5rem; }
+    .upload-section h3 { margin: 0 0 0.5rem 0; font-size: 1rem; }
+    .sprecord-files { max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 0.5rem; }
+    .sprecord-files label { display: block; padding: 0.3rem 0; cursor: pointer; }
+    .sprecord-files label:hover { background: #f5f5f5; }
+    .after-upload { margin-top: 1.5rem; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; }
+    .after-upload .dept-row { margin-bottom: 0.75rem; }
+    .after-upload select { padding: 0.4rem; min-width: 180px; }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Ручная загрузка аудио</h1>
+    <nav><a href="/">Звонки</a> <a href="/upload" class="nav-active">Загрузка</a> <a href="/leads">Лиды</a> <a href="/analytics">Аналитика</a> <a href="/voice-transfers" id="navVoiceBot" style="display:none">Переводы бота</a> <a href="/sto" id="navSto" style="display:none">СТО</a> <button type="button" class="nav-logout" id="navLogout">Завершить сеанс</button></nav>
+  </header>
+  <main>
+    <div class="upload-mode">
+      <label><input type="radio" name="uploadMode" value="computer" checked> С компьютера</label>
+      <label id="sprecordModeLabel"><input type="radio" name="uploadMode" value="sprecord"> Из SPRecord</label>
+    </div>
+
+    <div id="computerSection" class="upload-section">
+      <p class="filter-field" style="margin:0 0 0.75rem 0;"><label>Файл (WAV/MP3): <input type="file" id="fileInput" accept=".wav,.mp3,.ogg"></label></p>
+      <button type="button" id="btnUploadComputer">Загрузить</button>
+    </div>
+
+    <div id="sprecordSection" class="upload-section" style="display:none;">
+      <p style="display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem;margin:0 0 0.75rem 0;">
+        <span class="filter-field"><label>Дата: <input type="date" id="sprecordDate"></label></span>
+        <button type="button" id="btnShowFiles">Показать файлы</button>
+      </p>
+      <div id="sprecordFilesList" class="sprecord-files" style="display:none;"></div>
+      <p id="sprecordDeptRow" class="filter-field" style="display:none;"><label>Отдел: <select id="sprecordCallType">
+        <option value="OP_IN">ОП входящие</option>
+        <option value="OP_OUT">ОП исходящие</option>
+        <option value="STO_IN">СТО_ТО_вход</option>
+      </select></label></p>
+      <button type="button" id="btnUploadSprecord" style="display:none;">Загрузить из SPRecord</button>
+    </div>
+
+    <p id="message"></p>
+
+    <div id="processBlock" class="after-upload" style="display:none;">
+      <p>Звонок сохранён в БД. <a id="linkToCall" href="#">Открыть карточку</a></p>
+      <div class="dept-row filter-field">
+        <label>Отдел: <select id="deptSelect">
+          <option value="OP_IN">ОП входящие</option>
+          <option value="OP_OUT">ОП исходящие</option>
+          <option value="STO_IN">СТО_ТО_вход</option>
+        </select></label>
+      </div>
+      <button type="button" id="runProcess">Запустить транскрибацию</button>
+      <p id="processStatus"></p>
+      <pre id="processResult"></pre>
+    </div>
+  </main>
+  <script>
+    (function() {
+      function parseAdminRoleId() {
+        const v = window.ADMIN_ROLE_ID;
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        const n = parseInt(String(v), 10);
+        return Number.isFinite(n) ? n : null;
+      }
+      const roleId = parseAdminRoleId();
+      const canSprecordUpload = window.ADMIN_CAN_SPRECORD_UPLOAD === true;
+      if (!canSprecordUpload) {
+        const spLbl = document.getElementById('sprecordModeLabel');
+        if (spLbl) spLbl.style.display = 'none';
+        document.querySelector('input[name="uploadMode"][value="computer"]').checked = true;
+        document.getElementById('computerSection').style.display = 'block';
+        document.getElementById('sprecordSection').style.display = 'none';
+      }
+      if (roleId === 8) {
+        const nv = document.getElementById('navVoiceBot');
+        if (nv) nv.style.display = 'inline';
+      }
+      if (roleId === 2 || roleId >= 5) document.getElementById('navSto').style.display = 'inline';
+      document.getElementById('navLogout').onclick = async function() {
+        try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+        window.location.href = '/login';
+      };
+
+      const deptSelect = document.getElementById('deptSelect');
+      if (roleId === 4) deptSelect.innerHTML = '<option value="OP_IN">ОП входящие</option><option value="OP_OUT">ОП исходящие</option>';
+      else if (roleId === 5) deptSelect.innerHTML = '<option value="STO_IN">СТО_ТО_вход</option>';
+
+      const sprecordCallType = document.getElementById('sprecordCallType');
+      if (roleId === 4) sprecordCallType.innerHTML = '<option value="OP_IN">ОП входящие</option><option value="OP_OUT">ОП исходящие</option>';
+      else if (roleId === 5) sprecordCallType.innerHTML = '<option value="STO_IN">СТО_ТО_вход</option>';
+      if (roleId == null) {
+        if (deptSelect) deptSelect.disabled = true;
+        if (sprecordCallType) sprecordCallType.disabled = true;
+        const msg = document.getElementById('message');
+        if (msg) msg.textContent = 'Откройте «Загрузка» из меню после входа (не /static/upload.html).';
+      }
+
+      document.querySelectorAll('input[name="uploadMode"]').forEach(r => {
+        r.onchange = function() {
+          document.getElementById('computerSection').style.display = (this.value === 'computer') ? 'block' : 'none';
+          document.getElementById('sprecordSection').style.display = (this.value === 'sprecord') ? 'block' : 'none';
+          document.getElementById('message').textContent = '';
+        };
+      });
+
+      let selectedSprecordPath = null;
+
+      document.getElementById('btnUploadComputer').onclick = function() {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files.length) {
+          document.getElementById('message').textContent = 'Выберите файл';
+          return;
+        }
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+        document.getElementById('message').textContent = 'Загрузка…';
+        document.getElementById('processBlock').style.display = 'none';
+        fetch('/api/upload', { method: 'POST', body: fd })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok && data.call_id) {
+              document.getElementById('message').textContent = 'Готово. ID: ' + data.call_id;
+              showAfterUpload(data.call_id);
+              fileInput.value = '';
+            } else {
+              document.getElementById('message').textContent = data.detail || 'Ошибка';
+            }
+          })
+          .catch(err => { document.getElementById('message').textContent = 'Ошибка: ' + err.message; });
+      };
+
+      fetch('/api/admin_config', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (cfg) {
+          document.getElementById('sprecordDate').value = cfg.today;
+        })
+        .catch(function () {
+          document.getElementById('sprecordDate').value = new Date().toISOString().slice(0, 10);
+        });
+
+      document.getElementById('btnShowFiles').onclick = function() {
+        const dateStr = document.getElementById('sprecordDate').value;
+        if (!dateStr) { document.getElementById('message').textContent = 'Укажите дату'; return; }
+        document.getElementById('message').textContent = 'Загрузка списка…';
+        fetch('/api/upload/sprecord/files?date_str=' + dateStr)
+          .then(r => r.json().then(data => ({ ok: r.ok, data })))
+          .then(({ ok, data: files }) => {
+            if (!ok) {
+              document.getElementById('message').textContent = files.detail || 'Ошибка';
+              return;
+            }
+            const list = document.getElementById('sprecordFilesList');
+            const deptRow = document.getElementById('sprecordDeptRow');
+            const btn = document.getElementById('btnUploadSprecord');
+            if (!Array.isArray(files) || files.length === 0) {
+              list.innerHTML = '<p>Файлов не найдено</p>';
+              list.style.display = 'block';
+              deptRow.style.display = 'none';
+              btn.style.display = 'none';
+              document.getElementById('message').textContent = '';
+              return;
+            }
+            list.innerHTML = files.map(f => '<label><input type="radio" name="sprecordFile" value="' + f.path + '"> ' + f.name + ' (' + (f.size ? Math.round(f.size/1024) + ' КБ' : '') + ')</label>').join('');
+            list.style.display = 'block';
+            deptRow.style.display = 'block';
+            btn.style.display = 'inline';
+            document.getElementById('message').textContent = '';
+            list.querySelectorAll('input[name="sprecordFile"]').forEach(rad => {
+              rad.onchange = function() { selectedSprecordPath = this.value; };
+            });
+          })
+          .catch(err => {
+            document.getElementById('message').textContent = err.message || err.detail || 'Ошибка';
+          });
+      };
+
+      document.getElementById('btnUploadSprecord').onclick = function() {
+        const path = selectedSprecordPath || document.querySelector('input[name="sprecordFile"]:checked')?.value;
+        const callType = document.getElementById('sprecordCallType').value;
+        if (!path) { document.getElementById('message').textContent = 'Выберите файл'; return; }
+        const fd = new FormData();
+        fd.append('rel_path', path);
+        fd.append('call_type', callType);
+        document.getElementById('message').textContent = 'Загрузка…';
+        document.getElementById('processBlock').style.display = 'none';
+        fetch('/api/upload/from-sprecord', { method: 'POST', body: fd })
+          .then(r => r.json().then(data => ({ ok: r.ok, data })))
+          .then(({ ok, data }) => {
+            if (ok && data.call_id) {
+              document.getElementById('message').textContent = 'Готово. ID: ' + data.call_id;
+              showAfterUpload(data.call_id);
+            } else {
+              document.getElementById('message').textContent = data.detail || 'Ошибка';
+            }
+          })
+          .catch(err => {
+            document.getElementById('message').textContent = err.message || 'Ошибка';
+          });
+      };
+
+      function showAfterUpload(callId) {
+        const block = document.getElementById('processBlock');
+        block.style.display = 'block';
+        block.dataset.callId = callId;
+        document.getElementById('linkToCall').href = '/call/' + callId;
+      }
+
+      document.getElementById('runProcess').onclick = function() {
+        const callId = document.getElementById('processBlock').dataset.callId;
+        if (!callId) return;
+        const ct = document.getElementById('deptSelect').value;
+        const dept = ct.startsWith('OP') ? 'OP' : 'STO';
+        const fd = new FormData();
+        fd.append('department', dept);
+        fd.append('call_type', ct);
+        const status = document.getElementById('processStatus');
+        const result = document.getElementById('processResult');
+        status.textContent = 'Идёт транскрибация…';
+        result.textContent = '';
+        fetch('/api/calls/' + callId + '/process', { method: 'POST', body: fd })
+          .then(r => r.json())
+          .then(data => {
+            status.textContent = 'Готово.';
+            const lines = ['=== Нормализованный текст ===\n' + (data.normalized_text || '')];
+            const isOp = String(ct || '').startsWith('OP');
+            const overallStr = data.overall_score != null
+              ? (isOp ? String(Math.round(Number(data.overall_score))) + '/14' : Number(data.overall_score).toFixed(2) + '/5')
+              : '-';
+            lines.push('\n=== Оценки (общий балл ' + overallStr + ') ===');
+            if (data.scores) {
+              for (const [k, v] of Object.entries(data.scores)) {
+                if (k !== 'total_score') lines.push(k + ': ' + v);
+              }
+            }
+            result.textContent = lines.join('\n');
+          })
+          .catch(err => {
+            status.textContent = 'Ошибка';
+            result.textContent = err.message;
+          });
+      };
+    })();
+  </script>
+</body>
+</html>

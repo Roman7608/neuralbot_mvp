@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Домашняя папка
+Name[ru]=Домашняя папка
+Comment=Открыть каталог /home/vikingi в Thunar
+Comment[ru]=Открыть каталог /home/vikingi в Thunar
+Exec=/home/vikingi/VikingiAll/scripts/vikingi_open_home.sh
+Icon=folder-home
+Terminal=false
+Categories=System;FileManager;
+StartupNotify=true

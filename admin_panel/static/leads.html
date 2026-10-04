@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Лиды — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .vb-row-num { text-align: right; width: 2.75rem; font-variant-numeric: tabular-nums; }
+    .leads-vb-summary-note { font-size: 0.88rem; color: #444; max-width: 1200px; line-height: 1.45; margin: 0.35rem 0 0.75rem; }
+    #voiceDailySummaryTable th, #voiceDailySummaryTable td { font-size: 0.78rem; vertical-align: top; }
+    #voiceDailySummaryTable td.vb-num { font-variant-numeric: tabular-nums; text-align: right; }
+    .leads-to-booking-note { font-size: 0.88rem; color: #444; max-width: 1200px; line-height: 1.45; margin: 0.35rem 0 0.75rem; }
+    .leads-section-count { font-size: 0.9rem; color: #64748b; margin: 0 0 0.5rem; }
+    .leads-to-booking-filters { margin-bottom: 0.75rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Лиды</h1>
+    <nav>
+      <a href="/">Звонки</a>
+      <a href="/upload" id="navUpload">Загрузка</a>
+      <a href="/leads" class="nav-active">Лиды</a>
+      <a href="/analytics" id="navAnalytics">Аналитика</a>
+      <a href="/body-calls" id="navBodyCalls" style="display:none">Кузовной цех</a>
+      <a href="/voice-transfers" id="navVoiceBot" style="display:none">Переводы бота</a>
+      <a href="/sprecord-browse" id="navSprecordBrowse" style="display:none">SpRecord по дате</a>
+      <a href="/sto" id="navSto" style="display:none">СТО</a>
+      <button type="button" class="nav-logout" id="navLogout">Завершить сеанс</button>
+    </nav>
+  </header>
+  <main>
+    <section class="filters">
+      <div class="filter-row">
+        <div class="filter-field"><label>Период: <input type="date" id="dateFrom"> — <input type="date" id="dateTo"></label></div>
+        <div class="filter-quick">
+          <span>Быстро:</span>
+          <button type="button" id="btnToday">Сегодня</button>
+          <button type="button" id="btnWeek">Неделя (Пн–Вс)</button>
+          <button type="button" id="btnMonth">Месяц</button>
+        </div>
+        <div class="filter-field"><label>Канал: <select id="channel">
+          <option value="">Все</option>
+          <option value="chery_tenet">ОП Тенет</option>
+          <option value="service">Слесарный цех</option>
+          <option value="used_cars">авто с пробегом</option>
+          <option value="body_repair">Кузовной цех</option>
+          <option value="spares">отдел запчастей</option>
+          <option value="secretary">прочие</option>
+        </select></label></div>
+        <div class="filter-field"><label>Источник: <select id="source">
+          <option value="">Все (голос + MAX)</option>
+          <option value="phone">голосовой бот</option>
+          <option value="max">MAX-бот</option>
+        </select></label></div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-field"><label>Время: <select id="workingHours">
+          <option value="">Все</option>
+          <option value="working">с 8:00 до 20:00</option>
+          <option value="non_working">с 20:00 до 8:00 (нерабочие)</option>
+        </select></label></div>
+        <div class="filter-field"><label>Входящий номер: <input type="text" id="incomingNumber" placeholder="например, 9059457667"></label></div>
+        <div class="filter-field"><label>Отбор:
+          <select id="leadSelection">
+            <option value="">Все лиды</option>
+            <option value="hostess_followup">Непереведённые (для обзвона хостес)</option>
+          </select>
+        </label></div>
+        <button type="button" id="btnNonWorking" class="btn-small" title="Быстро: только нерабочие часы">Нерабочие</button>
+        <button type="button" id="btnClearFilters" class="btn-small" title="Сбросить все фильтры">Очистить фильтры</button>
+        <button type="button" id="applyFilters" class="btn-apply">Применить</button>
+        <span id="exportBtns" style="margin-left:1.5rem; display:none;">
+          <button type="button" id="exportCsv" title="Выгрузить лиды в CSV">⬇ CSV</button>
+          <button type="button" id="exportXlsx" title="Выгрузить лиды в Excel">⬇ Excel</button>
+        </span>
+      </div>
+    </section>
+    <section id="reportBlock" class="table-wrap">
+      <h2>Отчёт по периоду</h2>
+
+      <h3 style="font-size:1.05rem;margin:1rem 0 0.35rem;">Сводка по дням (голосовой бот)</h3>
+      <p class="leads-vb-summary-note">
+        <strong>Сессий</strong> — уникальные звонки в таблице голосовой аналитики (<code>voice_bot_sessions</code>), как на «Переводы бота».
+        <strong>Лидов (записей)</strong> — число строк в «Лидах» с источником телефон за календарный день (один звонок может дать несколько записей).
+        Переводы по отделам — события AMI <code>transfer_started</code>.
+        <strong>Не переведено (сброс)</strong> — сессии без записей в журнале переводов.
+      </p>
+      <div style="overflow-x:auto;">
+        <table id="voiceDailySummaryTable">
+          <thead>
+            <tr>
+              <th>День</th>
+              <th title="Строк в telegram_leads с source=phone за день">Лидов (записей)</th>
+              <th title="Узкая рубрика: запись на ТО (голос + MAX) за календарный день">Запись на ТО</th>
+              <th title="Уникальные сессии voice_bot_sessions за день">Сессий</th>
+              <th title="Сессии с ≥1 событием в журнале переводов">Переведено всего</th>
+              <th title="События ADMIN, AMI transfer_started">Администратор</th>
+              <th title="SERVICE_ASSISTANT + WORKSHOP_SL, успешный AMI">Ассистент сервиса</th>
+              <th title="OP_CHERY_TENET">ОП Чери и Тенет</th>
+              <th title="BODY">Кузовной цех</th>
+              <th title="OP_USED">Авто с пробегом</th>
+              <th title="PARTS">Отдел запчастей</th>
+              <th title="Сессии без записей в журнале переводов">Не переведено (сброс)</th>
+            </tr>
+          </thead>
+          <tbody id="voiceDailySummaryBody"></tbody>
+        </table>
+      </div>
+    </section>
+    <section id="toBookingBlock" class="table-wrap">
+      <h2>Лиды — запись на ТО</h2>
+      <p class="leads-to-booking-note">
+        Узкая рубрика: потребность «сервис» и признаки записи (авто, пробег, пожелания или строка <code>1C booking:</code> в тексте).
+        Общие фильтры периода и канала сверху применяются и здесь.
+      </p>
+      <div class="filter-row leads-to-booking-filters">
+        <div class="filter-field"><label>Источник записи:
+          <select id="toBookingSource">
+            <option value="only">Все источники</option>
+            <option value="voice">Голосовой бот</option>
+            <option value="max">MAX-бот</option>
+          </select>
+        </label></div>
+      </div>
+      <p id="toBookingCount" class="leads-section-count"></p>
+      <div id="toBookingGrouped"></div>
+    </section>
+    <section class="table-wrap">
+      <h2>Лиды по дням</h2>
+      <p id="allLeadsCount" class="leads-section-count"></p>
+      <div id="leadsGrouped"></div>
+    </section>
+    <p id="loading">Загрузка…</p>
+    <p id="error" class="error"></p>
+  </main>
+  <script>
+    function parseAdminRoleId() {
+      const v = window.ADMIN_ROLE_ID;
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      const n = parseInt(String(v), 10);
+      return Number.isFinite(n) ? n : null;
+    }
+    const roleId = parseAdminRoleId();
+    if (roleId == null) {
+      const er = document.getElementById('error');
+      if (er) er.textContent = 'Не удалось определить роль. Откройте «Лиды» из меню после входа (не /static/leads.html).';
+    }
+    if (roleId === 8) {
+      const nv = document.getElementById('navVoiceBot');
+      if (nv) nv.style.display = 'inline';
+      const ns = document.getElementById('navSprecordBrowse');
+      if (ns) ns.style.display = 'inline';
+    }
+    if (roleId != null && roleId <= 3) {
+      document.getElementById('navUpload').style.display = 'none';
+      document.getElementById('navAnalytics').style.display = 'none';
+    }
+    if (roleId === 2 || roleId >= 5) document.getElementById('navSto').style.display = 'inline';
+    if (roleId === 5 || roleId === 6 || roleId === 8) {
+      const nb = document.getElementById('navBodyCalls');
+      if (nb) nb.style.display = 'inline';
+    }
+    (function trimLeadsChannelSelect() {
+      const sel = document.getElementById('channel');
+      if (!sel) return;
+      if (roleId === 1 || roleId === 4) {
+        sel.innerHTML = '<option value="">Все (ОП)</option>'
+          + '<option value="chery_tenet">ОП Тенет</option>'
+          + '<option value="secretary">прочие</option>';
+      } else if (roleId === 2 || roleId === 5) {
+        sel.innerHTML = '<option value="">Все (СТО)</option>'
+          + '<option value="service">Слесарный цех</option>'
+          + '<option value="used_cars">авто с пробегом</option>'
+          + '<option value="body_repair">Кузовной цех</option>'
+          + '<option value="spares">отдел запчастей</option>';
+      } else if (roleId == null) {
+        sel.disabled = true;
+        document.getElementById('applyFilters').disabled = true;
+      }
+    })();
+    function fmtLeadsDateTime(iso) {
+      if (!iso) return '—';
+      var s = String(iso).replace('T', ' ').replace(/\.\d+/, '');
+      s = s.replace(/[+-]\d{2}:?\d{2}$/, '').replace(/Z$/i, '');
+      return s.trim();
+    }
+    function escHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function phoneLast10(v) {
+      const d = String(v == null ? '' : v).replace(/\D+/g, '');
+      if (d.length < 10) return '';
+      return d.slice(-10);
+    }
+    const HIDE_NEED_PHONE_LAST10 = '9023730808';
+    function dedupeHostessFollowupRows(rows) {
+      const byPhone = new Map();
+      const noPhone = [];
+      for (const r of (rows || [])) {
+        const p10 = phoneLast10(r && r.client_phone);
+        if (!p10) {
+          noPhone.push(r);
+          continue;
+        }
+        const prev = byPhone.get(p10);
+        if (!prev) {
+          byPhone.set(p10, r);
+          continue;
+        }
+        const a = String(prev.created_at || '');
+        const b = String((r && r.created_at) || '');
+        if (b > a) byPhone.set(p10, r);
+      }
+      return Array.from(byPhone.values()).concat(noPhone);
+    }
+    document.getElementById('navLogout').onclick = async function() {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+      window.location.href = '/login';
+    };
+
+    var serverCfg = null;
+    function todayStr() {
+      if (serverCfg && serverCfg.today) return serverCfg.today;
+      return new Date().toISOString().slice(0, 10);
+    }
+    function mondayOfWeek(d) {
+      const day = d.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      const m = new Date(d);
+      m.setDate(m.getDate() + diff);
+      return m;
+    }
+    function sundayOfWeek(d) {
+      const m = mondayOfWeek(d);
+      const s = new Date(m);
+      s.setDate(s.getDate() + 6);
+      return s;
+    }
+
+    const dateFrom = document.getElementById('dateFrom');
+    const dateTo = document.getElementById('dateTo');
+    const channel = document.getElementById('channel');
+    const source = document.getElementById('source');
+    const workingHours = document.getElementById('workingHours');
+    const incomingNumber = document.getElementById('incomingNumber');
+    const leadSelection = document.getElementById('leadSelection');
+    const toBookingSource = document.getElementById('toBookingSource');
+    const toBookingGrouped = document.getElementById('toBookingGrouped');
+    const toBookingCount = document.getElementById('toBookingCount');
+    const allLeadsCount = document.getElementById('allLeadsCount');
+    const applyBtn = document.getElementById('applyFilters');
+    const btnToday = document.getElementById('btnToday');
+    const btnWeek = document.getElementById('btnWeek');
+    const btnMonth = document.getElementById('btnMonth');
+    const btnClearFilters = document.getElementById('btnClearFilters');
+    const leadsGrouped = document.getElementById('leadsGrouped');
+    const loading = document.getElementById('loading');
+    const errEl = document.getElementById('error');
+
+    function applyMaxDateAttrs(todayStrDate) {
+      if (roleId != null && roleId <= 5) {
+        dateFrom.setAttribute('max', todayStrDate);
+        dateTo.setAttribute('max', todayStrDate);
+      }
+    }
+    function setToday() {
+      const t = todayStr();
+      dateFrom.value = t;
+      dateTo.value = t;
+    }
+    function setWeek() {
+      if (serverCfg && serverCfg.week_monday && serverCfg.week_sunday) {
+        dateFrom.value = serverCfg.week_monday;
+        dateTo.value = serverCfg.week_sunday;
+        return;
+      }
+      const d = new Date();
+      const m = mondayOfWeek(d);
+      const s = sundayOfWeek(d);
+      dateFrom.value = m.toISOString().slice(0, 10);
+      dateTo.value = s.toISOString().slice(0, 10);
+    }
+    function setMonth() {
+      if (serverCfg && serverCfg.month_first && serverCfg.month_last) {
+        dateFrom.value = serverCfg.month_first;
+        dateTo.value = serverCfg.month_last;
+        return;
+      }
+      const d = new Date();
+      const first = new Date(d.getFullYear(), d.getMonth(), 1);
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      dateFrom.value = first.toISOString().slice(0, 10);
+      dateTo.value = last.toISOString().slice(0, 10);
+    }
+    btnToday.onclick = function() { setToday(); load(); };
+    btnWeek.onclick = function() { setWeek(); load(); };
+    btnMonth.onclick = function() { setMonth(); load(); };
+    document.getElementById('btnNonWorking').onclick = function() {
+      workingHours.value = 'non_working';
+      load();
+    };
+    btnClearFilters.onclick = function() {
+      if (serverCfg) {
+        initLeadsDates();
+      } else {
+        const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+        const today = new Date().toISOString().slice(0, 10);
+        dateFrom.value = (roleId != null && roleId <= 5) ? yesterday : today;
+        dateTo.value = today;
+      }
+      channel.value = '';
+      source.value = '';
+      workingHours.value = '';
+      if (incomingNumber) incomingNumber.value = '';
+      if (leadSelection) leadSelection.value = '';
+      if (toBookingSource) toBookingSource.value = 'only';
+      load();
+    };
+
+    function buildLeadsParams() {
+      const params = new URLSearchParams();
+      if (dateFrom.value) params.set('date_from', dateFrom.value);
+      if (dateTo.value) params.set('date_to', dateTo.value);
+      if (channel.value) params.set('channel', channel.value);
+      if (source.value) params.set('source', source.value);
+      if (workingHours.value) params.set('working_hours', workingHours.value);
+      if (incomingNumber && incomingNumber.value.trim()) params.set('incoming_number', incomingNumber.value.trim());
+      if (leadSelection && leadSelection.value === 'hostess_followup') params.set('hostess_followup', '1');
+      return params;
+    }
+
+    function maybeDedupeHostess(rows) {
+      let listRows = Array.isArray(rows) ? rows.slice() : [];
+      if (leadSelection && leadSelection.value === 'hostess_followup') {
+        listRows = dedupeHostessFollowupRows(listRows);
+      }
+      return listRows;
+    }
+
+    function renderVoiceDailySummary(report) {
+      const vbBody = document.getElementById('voiceDailySummaryBody');
+      vbBody.innerHTML = '';
+      const vbRows = (report && report.voice_daily_summary) || [];
+      if (vbRows.length === 0) {
+        var tr0 = document.createElement('tr');
+        var td0 = document.createElement('td');
+        td0.colSpan = 12;
+        td0.textContent = 'Нет данных за выбранный период.';
+        tr0.appendChild(td0);
+        vbBody.appendChild(tr0);
+        return;
+      }
+      vbRows.forEach(function(row) {
+        var tr = document.createElement('tr');
+        var cells = [
+          row.day,
+          row.phone_leads_rows != null ? row.phone_leads_rows : '',
+          row.to_booking_rows != null ? row.to_booking_rows : '',
+          row.sessions_total,
+          row.sessions_with_transfer,
+          row.xfer_admin,
+          row.xfer_service_assistant,
+          row.xfer_op_chery_tenet,
+          row.xfer_body,
+          row.xfer_op_used,
+          row.xfer_parts,
+          row.sessions_no_transfer
+        ];
+        cells.forEach(function(cell, i) {
+          var td = document.createElement('td');
+          td.textContent = cell != null ? String(cell) : '';
+          if (i > 0) td.className = 'vb-num';
+          tr.appendChild(td);
+        });
+        vbBody.appendChild(tr);
+      });
+    }
+
+    function renderLeadsGrouped(container, listRows, emptyMsg, extraColumns) {
+      const byDay = {};
+      for (const r of listRows) {
+        const dt = r.created_at ? r.created_at.slice(0, 10) : '-';
+        if (!byDay[dt]) byDay[dt] = [];
+        byDay[dt].push(r);
+      }
+      const days = Object.keys(byDay).sort().reverse();
+      let html = '';
+      for (const day of days) {
+        const items = byDay[day].slice();
+        items.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+        const srcSet = {};
+        for (const r of items) {
+          const sd = (r.source_display != null && String(r.source_display).trim() !== '') ? String(r.source_display).trim() : '';
+          if (sd) srcSet[sd] = true;
+        }
+        const srcList = Object.keys(srcSet).sort();
+        let sourceLine = '';
+        if (srcList.length === 1) {
+          sourceLine = ' <span style="font-weight:normal;color:#444;font-size:0.92rem;">— источник: ' + escHtml(srcList[0]) + '</span>';
+        } else if (srcList.length > 1) {
+          sourceLine = ' <span style="font-weight:normal;color:#444;font-size:0.92rem;">— источники: ' + srcList.map(escHtml).join(', ') + '</span>';
+        }
+        html += '<div class="lead-day-block" style="margin-bottom:1.5rem;"><h3 style="display:flex;flex-wrap:wrap;align-items:baseline;gap:0.25rem;">'
+          + day + ' <span>(' + items.length + ')</span>' + sourceLine + '</h3>';
+        html += '<table><thead><tr><th class="vb-row-num">№</th><th>Дата и время</th>';
+        if (extraColumns && extraColumns.indexOf('booking_source') >= 0) {
+          html += '<th>Источник</th>';
+        }
+        html += '<th>Исход звонка</th>'
+          + '<th>Причина</th>'
+          + '<th>Последующий звонок</th>'
+          + '<th>Потребность</th>'
+          + '<th>Имя клиента</th><th>Телефон клиента</th></tr></thead><tbody>';
+        var rowNum = 1;
+        for (const r of items) {
+          const vcoRaw = (r.voice_outcome_display != null && String(r.voice_outcome_display).trim() !== '')
+            ? String(r.voice_outcome_display).trim() : '-';
+          const vcoDisp = escHtml(vcoRaw);
+          const hideNeed = roleId !== 8 && phoneLast10(r.client_phone) === HIDE_NEED_PHONE_LAST10;
+          const needDisp = hideNeed
+            ? '—'
+            : escHtml(
+              (r.lead_need_display_rich != null && String(r.lead_need_display_rich).trim() !== '')
+                ? String(r.lead_need_display_rich).trim()
+                : ((r.lead_need_display != null && String(r.lead_need_display).trim() !== '')
+                  ? String(r.lead_need_display).trim()
+                  : '—')
+            );
+          html += '<tr><td class="vb-row-num">' + (rowNum++) + '</td><td>' + escHtml(fmtLeadsDateTime(r.created_at)) + '</td>';
+          if (extraColumns && extraColumns.indexOf('booking_source') >= 0) {
+            const lbl = (r.service_booking_label != null && String(r.service_booking_label).trim() !== '')
+              ? String(r.service_booking_label).trim()
+              : (r.source_display || '—');
+            html += '<td>' + escHtml(lbl) + '</td>';
+          }
+          html += '<td>' + vcoDisp + '</td>'
+            + '<td>' + escHtml(r.hostess_reason || '—') + '</td>'
+            + '<td>' + escHtml(fmtLeadsDateTime(r.followup_transfer_at) || '—') + '</td>'
+            + '<td>' + needDisp + '</td>'
+            + '<td>' + escHtml(r.client_fio || '—') + '</td><td>' + escHtml(r.client_phone || '—') + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      container.innerHTML = html || ('<p>' + (emptyMsg || 'Нет лидов за выбранный период.') + '</p>');
+    }
+
+    function toBookingSourceLabel() {
+      const v = toBookingSource ? toBookingSource.value : 'only';
+      if (v === 'voice') return 'голосовой бот';
+      if (v === 'max') return 'MAX-бот';
+      return 'все источники';
+    }
+
+    function load() {
+      loading.style.display = 'block';
+      errEl.textContent = '';
+      const params = buildLeadsParams();
+      const paramsTo = new URLSearchParams(params);
+      paramsTo.set('service_booking', (toBookingSource && toBookingSource.value) ? toBookingSource.value : 'only');
+
+      Promise.all([
+        fetch('/api/leads/report?' + params).then(r => r.json()),
+        fetch('/api/leads?' + paramsTo).then(r => r.json()),
+        fetch('/api/leads?' + params).then(r => r.json())
+      ]).then(([report, toRows, allRows]) => {
+        loading.style.display = 'none';
+        renderVoiceDailySummary(report);
+
+        const toList = maybeDedupeHostess(toRows);
+        const allList = maybeDedupeHostess(allRows);
+        if (toBookingCount) {
+          toBookingCount.textContent = 'Всего записей на ТО: ' + toList.length
+            + ' (источник: ' + toBookingSourceLabel() + ')';
+        }
+        renderLeadsGrouped(toBookingGrouped, toList, 'Нет записей на ТО за выбранный период.', ['booking_source']);
+        if (allLeadsCount) {
+          allLeadsCount.textContent = 'Всего лидов: ' + allList.length;
+        }
+        renderLeadsGrouped(leadsGrouped, allList, 'Нет лидов за выбранный период.', null);
+      }).catch(e => {
+        loading.style.display = 'none';
+        errEl.textContent = 'Ошибка: ' + e.message;
+      });
+    }
+    applyBtn.onclick = load;
+
+    if (roleId != null && roleId >= 4) {
+      document.getElementById('exportBtns').style.display = 'inline';
+    }
+    function exportLeads(fmt) {
+      const params = new URLSearchParams();
+      if (dateFrom.value) params.set('date_from', dateFrom.value);
+      if (dateTo.value) params.set('date_to', dateTo.value);
+      if (channel.value) params.set('channel', channel.value);
+      if (source.value) params.set('source', source.value);
+      if (workingHours.value) params.set('working_hours', workingHours.value);
+      if (incomingNumber && incomingNumber.value.trim()) params.set('incoming_number', incomingNumber.value.trim());
+      if (leadSelection && leadSelection.value === 'hostess_followup') params.set('hostess_followup', '1');
+      params.set('fmt', fmt);
+      window.location.href = '/api/leads/export?' + params;
+    }
+    document.getElementById('exportCsv').onclick = function() { exportLeads('csv'); };
+    document.getElementById('exportXlsx').onclick = function() { exportLeads('xlsx'); };
+
+    function initLeadsDates() {
+      const yesterday = serverCfg
+        ? serverCfg.yesterday
+        : new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+      const todayStrDate = serverCfg
+        ? serverCfg.today
+        : new Date().toISOString().slice(0, 10);
+      applyMaxDateAttrs(todayStrDate);
+      if (roleId != null && roleId <= 5) {
+        dateFrom.value = yesterday;
+        dateTo.value = todayStrDate;
+      } else if (roleId != null) {
+        setToday();
+      }
+      if (roleId != null) load();
+    }
+    fetch('/api/admin_config', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (cfg) { serverCfg = cfg; initLeadsDates(); })
+      .catch(function () { initLeadsDates(); });
+  </script>
+</body>
+</html>

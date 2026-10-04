@@ -1,0 +1,19 @@
+fastapi
+uvicorn[standard]
+python-multipart
+faster-whisper
+numpy
+scipy
+soundfile
+python-dotenv
+redis
+cryptography
+# GigaAM-v3 (STT_ENGINE=gigaam)
+transformers>=4.40.0
+torch
+torchaudio
+sentencepiece
+accelerate
+hydra-core
+omegaconf
+huggingface_hub

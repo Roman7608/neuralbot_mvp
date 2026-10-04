@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Vikingi — остановка перед выключением
+Name[ru]=Vikingi — остановка перед выключением
+Comment=Останавливает контейнеры Vikingi перед выключением сервера
+Comment[ru]=Останавливает контейнеры Vikingi перед выключением сервера
+Exec=/home/vikingi/VikingiAll/scripts/vikingi_stop_before_shutdown.sh
+Icon=system-shutdown
+Terminal=true
+Categories=System;Settings;
+StartupNotify=true

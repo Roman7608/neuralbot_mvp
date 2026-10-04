@@ -1,0 +1,33 @@
+Изменения админки (роли, лиды, UI) — апрель 2026
+==================================================
+
+1. Роли
+-------
+- Журнал «Переводы бота» и API /api/voice-bot/* — только роль 8 (admin1).
+- Роль 7 снята: can_access_voice_transfers только == 8; middleware restrict_voice_bot_only_role удалён.
+- create_admin_user: роль 7 не принимается. scripts/create_roman_admin_user.py — только сообщение об устаревании.
+- Миграция: database/migrations/017_retire_admin_role7.sql
+  UPDATE role 7 -> 6; CHECK role_id 1..8, role_id != 7.
+- create_database_schema.sql: тот же CHECK для admin_users.
+
+2. Лиды и аналитика (роли 1,4 / 2,5)
+-------------------------------------
+- admin_panel/auth.py: leads_need_types_allowlist — ОП: chery_tenet, jetour, secretary; СТО: service, used_cars, body_repair, spares.
+- database/postgresql_manager.py: list_leads / get_leads_report — параметр need_types_in.
+- admin_panel/main.py: _leads_channel_query_params; GET /api/analytics/criteria учитывает analytics_department(role).
+
+3. Статика (admin_panel/static)
+--------------------------------
+- parseAdminRoleId() вместо window.ADMIN_ROLE_ID || 6 (или || 8) — без ложного «директор» при открытии /static/*.html.
+- index, leads, analytics, upload, sto, call, voice_transfers: сообщения при неизвестной роли; leads — урезанный select канала для 1,4 и 2,5.
+- Сравнения roleId <= N дополнены проверкой roleId != null (избегание coercion null -> 0 в JS).
+
+4. Команды (server7, каталог проекта)
+-------------------------------------
+Миграция:
+  cat database/migrations/017_retire_admin_role7.sql | docker compose exec -T postgres psql -U "${POSTGRES_USER:-analytics_user}" -d "${POSTGRES_DB:-vikingi_analytics}"
+
+Админка:
+  docker compose build admin-panel && docker compose up -d admin-panel
+
+UPDATE 0 при 017 — в БД не было пользователей с role_id = 7; constraint всё равно обновлён.

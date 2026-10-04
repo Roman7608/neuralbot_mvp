@@ -1,0 +1,23 @@
+Загрузка Faster-Whisper small...
+Загрузка Silero STT language=en...
+Silero: OK (не забудьте: это не русская модель)
+Загрузка GigaAM v3...
+GigaAM: пропуск — Error in call to target 'modeling_gigaam.GigaAMASR':
+InstantiationException("Error in call to target 'modeling_gigaam.FeatureExtractor':\nRuntimeError('Tensor.item() cannot be called on meta tensors')\nfull_key: cfg.preprocessor")
+
+Прогон 10 файлов × 5 гипотез...
+
+TSV: /home/vikingi/VikingiAll/experiments/stt_silero_fw_small_gigaam.tsv
+
+=== Сводка (ok / empty / halluc / other / error) ===
+engine	hypothesis	ok	empty	halluc	other	error
+silero_en_not_ru	H0_base	0	2	0	8	0
+silero_en_not_ru	H1_prompt	0	2	0	8	0
+silero_en_not_ru	H2_loud8db	0	2	0	8	0
+silero_en_not_ru	H3_trim	0	3	0	7	0
+silero_en_not_ru	H4_loudtrim+prompt	0	3	0	7	0
+whisper_small	H0_base	8	1	0	1	0
+whisper_small	H1_prompt	8	1	0	1	0
+whisper_small	H2_loud8db	8	1	0	1	0
+whisper_small	H3_trim	6	0	1	3	0
+whisper_small	H4_loudtrim+prompt	7	0	0	3	0

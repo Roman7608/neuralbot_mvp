@@ -1,0 +1,8 @@
+[Unit]
+Description=Ensure SpRecord CIFS is mounted on /mnt/sprecord
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'mountpoint -q /mnt/sprecord || mount /mnt/sprecord'

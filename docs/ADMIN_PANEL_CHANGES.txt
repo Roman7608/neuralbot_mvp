@@ -1,0 +1,114 @@
+Изменения веб-админки (Vikingi Call Analytics)
+==============================================
+
+--- 2026-06-02: лиды — запись на ТО (голос / MAX) ---
+
+Контекст: доработка страницы «Лиды» под сценарий записи на техническое обслуживание
+(голосовой бот → 1С, MAX-бот). Связано с ZapisSTO.txt (журнал ТО), блок 2026-06-02.
+
+1. API: обогащение строки лида
+   -----------------------------
+   Файл: admin_panel/main.py
+   - Функция _build_service_booking_view(row) вызывается для каждой строки в GET /api/leads
+     после загрузки из TelegramLeadsDB.list_leads().
+
+   Условие «это запись на ТО» (service_booking = true):
+     * source in ("phone", "max")
+     * need_type == "service"
+     * есть данные бронирования: car_brand / car_model / car_mileage / work_wishes
+       ИЛИ в need_text маркер «1c booking:» (регистронезависимо)
+
+   Новые поля в JSON ответа:
+     * service_booking (bool) — признак записи на ТО
+     * service_booking_source — "voice_bot" (source=phone) | "max" (source=max)
+     * service_booking_label — «Запись на ТО голосовой бот» | «Запись на ТО MAX»
+     * lead_need_display_rich — текст для колонки «Потребность», формат:
+       «{метка} | {марка модель} | {пробег} км | {work_wishes}»
+       Если частей нет — fallback на lead_need_display.
+
+   Маскировка тестового номера (как раньше для lead_need_display):
+     * _mask_lead_need_for_phone() также обнуляет lead_need_display_rich и need_text
+       для INTERNAL_TEST_PHONE_LAST10.
+
+2. API: фильтр и query-параметр
+   -----------------------------
+   Файл: admin_panel/main.py — GET /api/leads
+   - Параметр service_booking (regex only|voice|max):
+     * only — только лиды с service_booking=true
+     * voice — только голосовой бот (service_booking_source=voice_bot)
+     * max — только MAX (service_booking_source=max)
+   - Фильтрация выполняется в Python после обогащения строк (_build_service_booking_view),
+     не на уровне SQL.
+
+3. UI: страница «Лиды»
+   --------------------
+   Файл: admin_panel/static/leads.html
+   - Фильтр «Запись на ТО» (<select id="serviceBooking">):
+     Все | Только запись на ТО | Голосовой бот | MAX
+     → query service_booking=only|voice|max при загрузке и экспорте.
+   - Сортировка «Сначала запись на ТО» (<select id="bookingSort">):
+     booking_first — на клиенте строки с service_booking поднимаются вверх дня
+     (после сортировки по времени внутри группы).
+   - Колонка «Потребность»: приоритет lead_need_display_rich, иначе lead_need_display;
+     для тестового номера — «—» (HIDE_NEED_PHONE_LAST10 на фронте).
+   - Экспорт CSV/Excel: service_booking передаётся в /api/leads/export так же, как в списке.
+
+4. Источник данных в БД (без миграции админки)
+   --------------------------------------------
+   Поля car_brand, car_model, car_mileage, work_wishes приходят из telegram_leads
+   (заполняются голосовым/MAX сценарием записи на ТО и trace 1С).
+   need_type=service, source=phone|max — как в существующей модели лидов.
+
+5. Деплой и проверка
+   ------------------
+   Пересборка:
+     docker compose build admin-panel && docker compose up -d admin-panel
+
+   Проверка в браузере (Ctrl+F5 на /leads):
+     - фильтр «Только запись на ТО» показывает лиды с меткой и маркой/пробегом;
+     - «Потребность» вида: «Запись на ТО голосовой бот | Volkswagen Tiguan | 110000 км | …»
+
+   Пример API:
+     GET /api/leads?date_from=2026-06-02&date_to=2026-06-02&service_booking=voice
+
+================================================================================
+
+Дата фиксации (архив): 2026-04-06 (по контексту правок на server7)
+
+1. Список файлов «Из SPRecord» (upload)
+   -------------------------------------
+   Файл: admin_panel/main.py
+   - Эндпоинт GET /api/upload/sprecord/files отбирает записи за выбранный календарный день:
+     * по дате mtime на диске (как раньше), ИЛИ
+     * по префиксу имени YYYY_MM_DD_ в имени wav (как в SpRecord на CIFS).
+   - Общая функция парсинга даты из имени вынесена в:
+     call_analytics/sprecord_filename.py — date_from_sprecord_filename()
+
+2. Карточка звонка — транскрибация (UI)
+   -------------------------------------
+   Файл: admin_panel/static/call.html
+   - После POST /api/calls/{id}/process проверяется успех ответа (HTTP status).
+     При ошибке (403/503/500 и т.д.) показывается текст detail, страница не перезагружается «вхолостую».
+   - При первом запуске транскрибации в FormData передаются department и call_type (как при переобработке).
+
+3. Транскрибация с кнопки в Docker
+   --------------------------------
+   Файлы: admin_panel/main.py, requirements_docker.txt
+   - Если задана переменная окружения STT_SERVICE_URL (в docker-compose для admin-panel:
+     http://stt-service:8001), транскрибация выполняется через HTTP POST на stt-service /transcribe
+     (priority=batch), а не через faster-whisper/GigaAM внутри slim-образа админки.
+   - В образе admin-panel по-прежнему нет faster-whisper; без STT_SERVICE_URL при USE_GIGAAM=0
+     запрос падал с «Модуль faster-whisper не установлен».
+   - Проверка «ГПУ занят голосовым ботом» не блокирует транскрибацию, когда используется STT_SERVICE_URL
+     (очередь на стороне stt-service).
+   - В БД в поле stt_model для этого пути пишется gigaam (из ответа/ветки сервиса).
+   - В requirements_docker.txt добавлен пакет httpx для HTTP-клиента.
+
+4. Зависимости
+   ------------
+   - requirements_docker.txt: +httpx
+
+Пересборка контейнера после правок:
+  docker compose build admin-panel && docker compose up -d admin-panel
+
+Жёсткое обновление страницы в браузере (Ctrl+F5) после смены call.html.

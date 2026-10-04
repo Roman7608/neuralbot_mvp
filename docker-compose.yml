@@ -1,85 +1,319 @@
-version: "3.9"
 services:
-  db:
-    image: postgres:16
+
+  # ——— Инфраструктура ———
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${POSTGRES_DB:-vikingi_analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-analytics_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      # Согласовано с max-bot / telegram-bot / voice-bot — «стеночные» часы в логах и при инициализации
+      TZ: ${TZ:-Europe/Samara}
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
+      - ./create_database_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/migrations:/docker-entrypoint-initdb.d/migrations:ro
+    ports:
+      - "0.0.0.0:5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-analytics_user}"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   redis:
-    image: redis:7
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis_data:/data
-
-  api:
-    image: python:3.11-slim
-    working_dir: /app
-    volumes:
-      - ./:/app
-      - ./config:/app/config:ro
-      - recordings:/recordings
-    env_file: .env
-    environment:
-      - ASTERISK_HOST=asterisk
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "8000:8000"
-    command: bash -lc "pip install --no-cache-dir fastapi uvicorn[standard] sqlalchemy psycopg2-binary pydantic aiogram httpx pyyaml alembic pytz redis && uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    depends_on:
-      - db
-      - redis
-      - asterisk
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  worker:
-    image: python:3.11-slim
-    working_dir: /app
-    volumes:
-      - ./:/app
-    env_file: .env
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    command: bash -lc "pip install --no-cache-dir redis rq && python -c 'print("worker stub")'"
-    depends_on:
-      - api
-      - redis
+  # ——— AI-сервисы ———
 
-  asterisk:
+  stt-service:
     build:
       context: .
-      dockerfile: Dockerfile.asterisk
-    ports:
-      - "5060:5060/udp"
-      - "5038:5038/tcp"
-      - "10000-10100:10000-10100/udp"
-    volumes:
-      - ./asterisk-config:/etc/asterisk:ro
-      - recordings:/recordings
+      dockerfile: Dockerfile.stt
+    restart: unless-stopped
     environment:
-      - ASTERISK_HOST=asterisk
-      - ASTERISK_PORT=5038
-      - ASTERISK_USERNAME=admin
-      - ASTERISK_PASSWORD=amp111
+      STT_ENGINE: gigaam
+      # GigaAM e2e_ctc — для голосового бота (лучше Чери, слесарный цех, ключевые слова)
+      GIGAAM_MODEL_PATH: /app/models/gigaam-v3
+      # Запасной STT (при необходимости); также читаются устаревшие WHISPER_MODEL_PATH_* из .env
+      STT_BACKUP_MODEL_PATH: Systran/faster-whisper-medium
+      LOAD_STT_ALT_MODEL: "false"
+      STT_DEVICE: cuda
+      STT_COMPUTE_TYPE: float16
+      HF_HOME: /root/.cache/huggingface
+      HF_TOKEN: ${HF_TOKEN}
+    volumes:
+      - stt_hf_cache:/root/.cache
+    ports:
+      - "8001:8001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "asterisk", "-rx", "core show version"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+  tts-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.tts
+    restart: unless-stopped
+    environment:
+      SILERO_MODEL_PATH: /models/tts/v5_1_ru.pt
+      SILERO_SPEAKER: ${SILERO_SPEAKER:-xenia}
+      SILERO_SAMPLE_RATE: ${SILERO_SAMPLE_RATE:-48000}
+      SILERO_SPEED: ${SILERO_SPEED:-1.1}
+    volumes:
+      - ${HOME}/Загрузки/SileroTTS-model-v5_1_ru/data/v5_1_ru.pt:/models/tts/v5_1_ru.pt:ro
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
+
+  # ——— Приложения ———
+
+  admin-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    restart: unless-stopped
+    command: uvicorn admin_panel.main:app --host 0.0.0.0 --port 8000
+    environment:
+      TZ: ${TZ:-Europe/Samara}
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: ${POSTGRES_DB:-vikingi_analytics}
+      POSTGRESQL_ANALYTICS_USER: ${POSTGRES_USER:-analytics_user}
+      POSTGRESQL_ANALYTICS_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-vikingi-admin-secret-change-in-prod}
+      STT_SERVICE_URL: http://stt-service:8001
+      # GigaAM: без COMBO CTC+RNNT и без split по гудкам — сохранение приветствия после перевода (см. .env)
+      GIGAAM_COMBO_ENABLED: ${GIGAAM_COMBO_ENABLED:-0}
+      GIGAAM_SPLIT_ON_TRANSFER_TONES: ${GIGAAM_SPLIT_ON_TRANSFER_TONES:-0}
+      # Подавление тональных гудков перевода в analyze_call_quality.transcribe_audio_gigaam (0=выкл)
+      GIGAAM_STRIP_TRANSFER_TONES: ${GIGAAM_STRIP_TRANSFER_TONES:-1}
+      # Длинные звонки GigaAM: первый чанк, overlap, дедуп на стыке (как у run_local / retranscribe)
+      GIGAAM_CHUNK_FIRST_SEC: ${GIGAAM_CHUNK_FIRST_SEC:-8}
+      GIGAAM_CHUNK_OVERLAP_SEC: ${GIGAAM_CHUNK_OVERLAP_SEC:-2}
+      GIGAAM_CHUNK_DEDUP_WORDS: ${GIGAAM_CHUNK_DEDUP_WORDS:-12}
+      # Записи сессий голосового бота (стерео: клиент / бот), см. VOICE_BOT_RECORDINGS_ROOT у voice-bot
+      VOICE_BOT_RECORDINGS_ROOT: /mnt/audio_calls/calls/voice_bot
+    volumes:
+      - ./storage:/app/storage
+      - ./audio_responses:/app/audio_responses:ro
+      # HDD для аудиозвонков: rw для загрузки файлов через админку
+      - /mnt/audio_calls:/mnt/audio_calls
+      # SPRecord (server5): только чтение для списка/импорта в админке
+      - /mnt/sprecord:/mnt/sprecord:ro
+      # Политика ПДн — публичный URL /public/privacy-policy (MAX-бот, ссылка в кнопке)
+      - ./Analytic/Политика обработки персональных данных Викинги (18.11.22).docx:/app/Analytic/Политика обработки персональных данных Викинги (18.11.22).docx:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # По умолчанию не запускается. Включить: docker compose --profile telegram up -d telegram-bot
+  telegram-bot:
+    profiles:
+      - telegram
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    restart: unless-stopped
+    command: python -m telegram_bot.bot
+    environment:
+      # Как на хосте server7 (timedatectl); иначе datetime.now() в контейнере часто UTC
+      TZ: ${TZ:-Europe/Samara}
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: ${POSTGRES_DB:-vikingi_analytics}
+      POSTGRESQL_ANALYTICS_USER: ${POSTGRES_USER:-analytics_user}
+      POSTGRESQL_ANALYTICS_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+    volumes:
+      - ./Analytic/Политика обработки персональных данных Викинги (18.11.22).docx:/app/Analytic/Политика обработки персональных данных Викинги (18.11.22).docx:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  max-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    restart: unless-stopped
+    command: python -m max_bot.bot
+    environment:
+      TZ: ${TZ:-Europe/Samara}
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+      MAX_API_BASE: ${MAX_API_BASE:-https://platform-api.max.ru}
+      MAX_POLL_TIMEOUT: ${MAX_POLL_TIMEOUT:-30}
+      MAX_POLL_LIMIT: ${MAX_POLL_LIMIT:-100}
+      VIKINGI_PUBLIC_BASE_URL: ${VIKINGI_PUBLIC_BASE_URL:-}
+      MAX_POLICY_DOC_URL: ${MAX_POLICY_DOC_URL:-}
+      # Путь к .docx/.pdf в контейнере; пусто = искать Analytic/Политика...docx (том ниже)
+      MAX_POLICY_LOCAL_PATH: ${MAX_POLICY_LOCAL_PATH:-}
+      # 0 = скрыть «Записаться на ТО» (пока нет 1С Альфа); 1 = включить сценарий записи
+      MAX_ALFA_SERVICE_BOOKING_ENABLED: ${MAX_ALFA_SERVICE_BOOKING_ENABLED:-0}
+      # Чаты MAX по отделам (из .env; без этого лиды не уходят в группы)
+      MAX_CHAT_CHERY_TENET: ${MAX_CHAT_CHERY_TENET:-}
+      MAX_CHAT_USED_CARS: ${MAX_CHAT_USED_CARS:-}
+      MAX_CHAT_SERVICE: ${MAX_CHAT_SERVICE:-}
+      MAX_CHAT_BODY_REPAIR: ${MAX_CHAT_BODY_REPAIR:-}
+      MAX_CHAT_SPARES: ${MAX_CHAT_SPARES:-}
+      MAX_CHAT_CONSULTANT: ${MAX_CHAT_CONSULTANT:-}
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: ${POSTGRES_DB:-vikingi_analytics}
+      POSTGRESQL_ANALYTICS_USER: ${POSTGRES_USER:-analytics_user}
+      POSTGRESQL_ANALYTICS_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - ./Analytic/Политика обработки персональных данных Викинги (18.11.22).docx:/app/Analytic/Политика обработки персональных данных Викинги (18.11.22).docx:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ——— Телефония ———
+
+  asterisk:
+    build:
+      context: ./asterisk
+    restart: unless-stopped
+    environment:
+      INFOLADA_SIP_HOST: ${INFOLADA_SIP_HOST:-81.23.191.220}
+      INFOLADA_SIP_PORT: ${INFOLADA_SIP_PORT:-5060}
+      INFOLADA_SIP_USER: ${INFOLADA_SIP_USER:-vikingi-ai}
+      INFOLADA_SIP_PASSWORD: ${INFOLADA_SIP_PASSWORD:-changeme}
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "10000-10100:10000-10100/udp"
+    depends_on:
+      voice-bot:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx 'pjsip show registrations' 2>/dev/null | grep -q Registered"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  voice-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.voice
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Samara
+      # v2 — короткое приветствие и нерабочее 23/24; legacy — резерв (см. services/voice/voice_phrases.py)
+      VOICE_SCENARIO: ${VOICE_SCENARIO:-v2}
+      AUDIOSOCKET_HOST: "0.0.0.0"
+      AUDIOSOCKET_PORT: "9092"
+      STT_SERVICE_URL: http://stt-service:8001
+      TTS_SERVICE_URL: http://tts-service:8002
+      # Антиэхо после WAV/TTS; переопределение: POST_PLAYBACK_GUARD_MS в .env
+      POST_PLAYBACK_GUARD_MS: ${POST_PLAYBACK_GUARD_MS:-300}
+      MAX_CONCURRENT_CALLS: ${MAX_CONCURRENT_CALLS:-5}
+      ASTERISK_AMI_HOST: ${ASTERISK_AMI_HOST:-}
+      ASTERISK_AMI_PORT: ${ASTERISK_AMI_PORT:-5038}
+      ASTERISK_AMI_USER: ${ASTERISK_AMI_USER:-}
+      ASTERISK_AMI_SECRET: ${ASTERISK_AMI_SECRET:-}
+      ASTERISK_TRANSFER_MODE: ${ASTERISK_TRANSFER_MODE:-sip}
+      # Только цели Dial перевода с бота (не 695875/695870 — исходящие линии отделов)
+      INFOLADA_ALLOWED_TARGETS: ${INFOLADA_ALLOWED_TARGETS:-697070,696157,697777,695873,695874}
+      ASTERISK_TRANSFER_CONTEXT: ${ASTERISK_TRANSFER_CONTEXT:-transfer-to-operator}
+      ASTERISK_TRANSFER_EXTEN: ${ASTERISK_TRANSFER_EXTEN:-100}
+      ASTERISK_TRANSFER_TARGET_ADMIN: ${ASTERISK_TRANSFER_TARGET_ADMIN:-697070}
+      ASTERISK_TRANSFER_TARGET_USED_CARS: ${ASTERISK_TRANSFER_TARGET_USED_CARS:-696157}
+      ASTERISK_TRANSFER_TARGET_CHERY_TENET: ${ASTERISK_TRANSFER_TARGET_CHERY_TENET:-697070}
+      ASTERISK_TRANSFER_TARGET_SERVICE: ${ASTERISK_TRANSFER_TARGET_SERVICE:-697777}
+      ASTERISK_TRANSFER_TARGET_SERVICE_ASSISTANT: ${ASTERISK_TRANSFER_TARGET_SERVICE_ASSISTANT:-697777}
+      ASTERISK_TRANSFER_TARGET_BODY_REPAIR: ${ASTERISK_TRANSFER_TARGET_BODY_REPAIR:-695873}
+      ASTERISK_TRANSFER_TARGET_PARTS: ${ASTERISK_TRANSFER_TARGET_PARTS:-695874}
+      ASTERISK_TRANSFER_TARGET_ACCOUNTING: ${ASTERISK_TRANSFER_TARGET_ACCOUNTING:-}
+      ASTERISK_TRANSFER_TARGET_DEFAULT: ${ASTERISK_TRANSFER_TARGET_DEFAULT:-697070}
+      AUDIO_RESPONSES_DIR: /app/audio_responses
+      CLIENTS_BASE_PATH: /app/data/clientsbase.xlsx
+      NORMA_PATH: /app/data/norma.xlsx
+      SLOT_PATH: /app/data/slot.xlsx
+      STO_TO_TABLE_PATH: ${STO_TO_TABLE_PATH:-/mnt/sto_to_table/_СТО/! ТО Сводная таблица.xlsx}
+      # 1 = прод-вход в запись для всех SERVICE; 0 = откат к входу только по «Австралии»
+      VOICE_TO_BOOKING_PROD_ENABLED: ${VOICE_TO_BOOKING_PROD_ENABLED:-0}
+      LEADS_PATH: /app/data/test_leads.xlsx
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: ${POSTGRES_DB:-vikingi_analytics}
+      POSTGRESQL_ANALYTICS_USER: ${POSTGRES_USER:-analytics_user}
+      POSTGRESQL_ANALYTICS_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      ICS_ALFA_HTTP_URL: ${ICS_ALFA_HTTP_URL:-http://192.168.0.11/Alfa6Test/hs}
+      ICS_ALFA_API_KEY: ${ICS_ALFA_API_KEY:-}
+      ICS_ALFA_HTTP_USER: ${ICS_ALFA_HTTP_USER:-}
+      ICS_ALFA_HTTP_PASSWORD: ${ICS_ALFA_HTTP_PASSWORD:-}
+      ICS_ALFA_SERVICE_POST_ID: ${ICS_ALFA_SERVICE_POST_ID:-}
+      # Уведомления о записи на ТО в сервисный чат MAX (max_bot/voice_service_booking_notify.py)
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+      MAX_API_BASE: ${MAX_API_BASE:-https://platform-api.max.ru}
+      MAX_CHAT_SERVICE: ${MAX_CHAT_SERVICE:-}
+      # JSONL-трассировка ветки «запись на ТО» (dialog/voice_to_booking_trace.py); на хосте: ./storage/…
+      VOICE_TO_TRACE_PATH: ${VOICE_TO_TRACE_PATH:-/app/storage/voice_to_booking.jsonl}
+      # Запись WAV на HDD (рядом с копиями SpRecord): mkdir -p /mnt/audio_calls/calls/voice_bot на хосте
+      VOICE_BOT_RECORDINGS_ROOT: /app/voice_recordings
+      VOICE_BOT_RECORDINGS_MIN_FREE_MB: ${VOICE_BOT_RECORDINGS_MIN_FREE_MB:-512}
+      VOICE_BOT_RECORDINGS_MAX_MINUTES: ${VOICE_BOT_RECORDINGS_MAX_MINUTES:-60}
+    volumes:
+      - ./audio_responses:/app/audio_responses:ro
+      - ./storage:/app/storage
+      - ./working_hours.json:/app/working_hours.json:ro
+      - /mnt/audio_calls/calls/voice_bot:/app/voice_recordings:rw
+      - ./clientsbase.xlsx:/app/data/clientsbase.xlsx:ro
+      - ./norma.xlsx:/app/data/norma.xlsx:ro
+      - ./slot.xlsx:/app/data/slot.xlsx:ro
+      # Сводная таблица ТО (server2 SMB → /mnt/sto_to_table на хосте server7)
+      - /mnt/sto_to_table:/mnt/sto_to_table:ro
+      # test_leads.xlsx — legacy fallback внутри контейнера (Excel-вывод лидов
+      # при недоступности БД). На хост не маппим: основной путь — PostgreSQL.
+    ports:
+      - "8003:8003"
+    expose:
+      - "9092"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      stt-service:
+        condition: service_healthy
+      tts-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
-  db_data: {}
-  redis_data: {}
-  recordings: {}
+  pg_data:
+  stt_hf_cache:

@@ -1,0 +1,16 @@
+---
+description: Перед правками MAX-бота — читать журнал и SETUP
+globs: max_bot/**
+alwaysApply: false
+---
+
+# MAX-бот (`max_bot/`): порядок работ
+
+Перед **любыми** изменениями в каталоге `max_bot/`:
+
+1. Прочитать **`docs/MAX_BOT_RECENT_CHANGES.txt`** — актуальные решения, типовые ошибки, пересборка Docker.
+2. Прочитать **`docs/MAX_BOT_SETUP.md`** — сценарии, переменные `.env`, отличия от Telegram.
+
+После правок Python: код попадает в контейнер только через **образ** (`Dockerfile.app`), не через bind-mount — на server7 выполнять `docker compose build max-bot` и `up -d` (см. журнал).
+
+Если меняется разбор телефона/vCard для контакта MAX, проверить общий модуль **`telegram_bot/utils/phone_normalizer.py`** и при необходимости обновить запись в `docs/MAX_BOT_RECENT_CHANGES.txt`.

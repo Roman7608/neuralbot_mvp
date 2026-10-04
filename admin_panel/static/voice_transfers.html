@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Переводы голосового бота — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .vb-audio-note { font-size: 0.9rem; color: #444; margin: 0.5rem 0 1rem; }
+    .vb-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; align-items: center; justify-content: center; }
+    .vb-modal-overlay.open { display: flex; }
+    .vb-modal { background: #fff; padding: 1.25rem; border-radius: 8px; max-width: 520px; width: 92%; box-shadow: 0 8px 32px rgba(0,0,0,.2); }
+    .vb-modal h3 { margin-top: 0; }
+    .vb-modal label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; }
+    .vb-modal textarea, .vb-modal select { width: 100%; box-sizing: border-box; padding: 0.5rem; }
+    .vb-modal textarea { min-height: 80px; }
+    .vb-modal-actions { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .btn-stt { font-size: 0.85rem; padding: 0.2rem 0.5rem; cursor: pointer; }
+    .feedback-filters { margin-bottom: 0.75rem; }
+    .feedback-filters label { margin-right: 1rem; }
+    .vb-summary-note { font-size: 0.88rem; color: #444; max-width: 1200px; line-height: 1.45; margin-bottom: 0.75rem; }
+    #summaryTable th, #summaryTable td { font-size: 0.78rem; vertical-align: top; }
+    #summaryTable td.vb-num { font-variant-numeric: tabular-nums; text-align: right; }
+    #vb30dStatsTable th, #vb30dStatsTable td { font-size: 0.78rem; vertical-align: top; }
+    #vb30dStatsTable td.vb-num { font-variant-numeric: tabular-nums; text-align: right; }
+    .vb-stt-cell { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+    .vb-row-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; width: 3.5rem; }
+    /* Таблица сессий: ширина по содержимому + несколько синхронных горизонтальных полос */
+    .vb-sessions-scroll-stack { max-width: 100%; margin-bottom: 0.35rem; }
+    .vb-sessions-hscroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      max-width: 100%;
+      -webkit-overflow-scrolling: touch;
+    }
+    .vb-sessions-hscroll-top,
+    .vb-sessions-hscroll-bottom {
+      height: 17px;
+      background: #eef2f6;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .vb-sessions-hscroll-top { margin-bottom: 6px; }
+    .vb-sessions-hscroll-bottom { margin-top: 6px; }
+    .vb-sessions-hscroll-inner { height: 1px; }
+    .vb-sessions-hscroll-main {
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+    }
+    .vb-sessions-hscroll-main table.vb-sessions-table {
+      width: max-content;
+      min-width: 100%;
+    }
+    .vb-sessions-hscroll-main .vb-sessions-table th,
+    .vb-sessions-hscroll-main .vb-sessions-table td {
+      padding: 0.35rem 0.45rem;
+      font-size: 0.82rem;
+      vertical-align: middle;
+    }
+    .vb-sessions-hscroll-main .vb-sessions-table .vb-stt-cell {
+      max-width: min(18rem, 42vw);
+    }
+    .vb-sessions-hscroll-main .vb-sessions-table th.vb-col-actions,
+    .vb-sessions-hscroll-main .vb-sessions-table td.vb-col-actions {
+      white-space: nowrap;
+    }
+    .vb-sessions-hscroll-main .vb-sessions-table .btn-detail {
+      white-space: nowrap;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.8rem;
+    }
+    .vb-sessions-scroll-stack.vb-sessions-no-x-scroll .vb-sessions-hscroll-top,
+    .vb-sessions-scroll-stack.vb-sessions-no-x-scroll .vb-sessions-hscroll-bottom {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Переводы голосового бота</h1>
+    <nav id="mainNav">
+      <a href="/voice-transfers" class="nav-active">Переводы бота</a>
+      <a href="/sprecord-browse" id="navSprecordBrowse">SpRecord по дате</a>
+      <a href="/" id="navCalls">Звонки</a>
+      <a href="/upload" id="navUpload">Загрузка</a>
+      <a href="/leads" id="navLeads">Лиды</a>
+      <a href="/analytics" id="navAnalytics">Аналитика</a>
+      <a href="/sto" id="navSto" style="display:none">СТО</a>
+      <button type="button" class="nav-logout" id="navLogout">Завершить сеанс</button>
+    </nav>
+  </header>
+  <main>
+    <section class="filters">
+      <div class="filter-row">
+        <div class="filter-field"><label>Период: <input type="date" id="dateFrom"> — <input type="date" id="dateTo"></label>
+          <span class="vb-audio-note" style="display:block;margin-top:0.35rem;">Считается <strong>диапазон</strong> (обе даты включительно). Заполнено только одно поле — второе подставится как тот же день (иначе «по» без «с» тянуло бы все более ранние дни).</span></div>
+        <button type="button" id="applyFilters">Обновить</button>
+        <a class="button-link" id="exportCsv" href="#">CSV</a>
+        <a class="button-link" id="exportXlsx" href="#">Excel</a>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <h2>Сводка по дням</h2>
+      <p class="vb-summary-note">
+        <strong>Первые три числовые колонки</strong> — все записи лидов с источником телефон за <strong>календарный день создания лида</strong> (<code>created_at</code>), как число «Лидов (записей)» на странице «Лиды». Правило «переведено / не переведено» — то же, что колонки «Исход звонка» и «Последний перевод»:
+        <strong>Переведено всего</strong> — есть категория последнего события в журнале переводов или исход <code>transfer_started</code>;
+        <strong>Не переведено (сброс)</strong> — иначе (в т.ч. сброс до перевода: в интерфейсе «—»).
+        Колонки по направлениям — по-прежнему число <strong>событий</strong> с успешным AMI (<code>transfer_started</code>); одна сессия может дать несколько событий.
+        Колонка <strong>«Ассистент сервиса»</strong> суммирует успешные переводы и на линию ассистента (<code>SERVICE_ASSISTANT</code>), и на слесарный цех (<code>WORKSHOP_SL</code>).
+      </p>
+      <div style="overflow-x:auto;">
+      <table id="summaryTable">
+        <thead>
+          <tr>
+            <th>День</th>
+            <th title="Записи телефонных лидов за календарный день created_at (как «Лиды»)">Записей лидов</th>
+            <th title="Как «Исход»/«Перевод» в лидах: категория последнего перевода или transfer_started">Переведено всего</th>
+            <th title="События ADMIN, AMI transfer_started">Администратор</th>
+            <th title="Ассистент сервиса и слесарный цех (SERVICE_ASSISTANT + WORKSHOP_SL), успешный AMI">Ассистент сервиса</th>
+            <th title="События OP_CHERY_TENET, AMI transfer_started">ОП Чери и Тенет</th>
+            <th title="События BODY, AMI transfer_started">Кузовной цех</th>
+            <th title="События OP_USED, AMI transfer_started">Авто с пробегом</th>
+            <th title="События PARTS, AMI transfer_started">Отдел запчастей</th>
+            <th title="Иначе чем «Переведено»: нет категории и не transfer_started — как «—» в лидах">Не переведено (сброс)</th>
+          </tr>
+        </thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <h2>Сессии</h2>
+      <p class="vb-audio-note" style="margin-bottom:0.75rem;">
+        Если на сервере включена запись (<code>VOICE_BOT_RECORDINGS_ROOT</code>), в колонке <strong>Запись</strong> будет «да» и кнопка <strong>Слушать</strong> —
+        откроется блок ниже со встроенным плеером. Аудио <strong>стерео</strong>: <strong>левый канал — клиент</strong>, правый — бот; строки роли <code>client</code>
+        в «Журнале реплик» — это текст после STT (сравнение с тем, что слышно слева). По длительности записи и последним репликам можно оценить, не сбросил ли клиент трубку до ответа бота.
+        Если таблица шире окна, горизонтальная прокрутка продублирована <strong>сверху и снизу</strong> таблицы (синхронно с основной полосой у самой таблицы).
+        <strong>Колонка AMI:</strong> значение из БД — не «оценка разговора», а исход команды AMI Redirect.
+        При нормальной АТС у большинства строк с переводом будет <code>transfer_started</code> (Asterisk вернул Success) — это ожидаемо.
+        Иначе смотрите <code>no_operator</code> или пусто (не записывали); направление смотрите в «Последний перевод».
+      </p>
+      <div class="feedback-filters" style="margin-bottom:0.75rem;">
+        <label>Порядок по дате начала
+          <select id="sessionOrder">
+            <option value="desc" selected>сначала новые</option>
+            <option value="asc">сначала старые</option>
+          </select>
+        </label>
+        <label>Перевод (журнал)
+          <select id="sessionTransfer">
+            <option value="" selected>все</option>
+            <option value="yes">был (есть событие)</option>
+            <option value="no">не было</option>
+          </select>
+        </label>
+      </div>
+      <div class="vb-sessions-scroll-stack" id="vbSessionsScrollStack">
+        <div class="vb-sessions-hscroll vb-sessions-hscroll-top" title="Горизонтальная прокрутка таблицы (как снизу)" aria-hidden="true">
+          <div class="vb-sessions-hscroll-inner"></div>
+        </div>
+        <div class="vb-sessions-hscroll vb-sessions-hscroll-main" role="region" aria-label="Таблица сессий, прокрутка по горизонтали">
+          <table class="vb-sessions-table">
+            <thead>
+              <tr>
+                <th class="vb-row-num" title="Порядковый номер входящего звонка в списке (с учётом периода, фильтров и страницы)">№</th>
+                <th>Начало</th>
+                <th>Телефон</th>
+                <th title="Имя из state_machine при завершении или ФИО из лида (телефон)">Имя</th>
+                <th title="STT клиента после вопроса бота «Какой отдел Вас интересует?» (меню отделов); если маркера нет в журнале — все реплики клиента">Что запросил (STT)</th>
+                <th>Стейт</th>
+                <th>Реплик (кл/бот)</th>
+                <th>Последний перевод</th>
+                <th title="Результат AMI у последнего события перевода. transfer_started = Asterisk принял Redirect (не то же самое, что оператор снял трубку). Пусто — не писали в БД.">AMI</th>
+                <th title="Файл WAV на диске сервера (если сохранён)">Запись</th>
+                <th class="vb-col-actions">Действие</th>
+              </tr>
+            </thead>
+            <tbody id="sessionsBody"></tbody>
+          </table>
+        </div>
+        <div class="vb-sessions-hscroll vb-sessions-hscroll-bottom" title="Горизонтальная прокрутка таблицы" aria-hidden="true">
+          <div class="vb-sessions-hscroll-inner"></div>
+        </div>
+      </div>
+      <nav id="pagination" class="pagination" style="display:none;">
+        <button type="button" id="prevPage">← Назад</button>
+        <span id="pageInfo"></span>
+        <button type="button" id="nextPage">Вперёд →</button>
+      </nav>
+    </section>
+
+    <section id="detailSection" class="detail-section" style="display:none;">
+      <h2>Детали сессии <span id="detailUuid"></span></h2>
+      <p id="detailCallerPhone" class="vb-audio-note" style="display:none;">
+        <strong>Телефон</strong>: <span id="detailCallerPhoneVal"></span>
+      </p>
+      <p><a href="#" id="closeDetail">Закрыть</a>
+        <span id="recLinkWrap" style="margin-left:1rem;"> | <a href="#" id="recLink" target="_blank" rel="noopener">Скачать WAV</a></span>
+        <span style="margin-left:1rem;">| <a href="#" id="feedbackSessionLink">Отметить ошибку (вся сессия)</a></span>
+      </p>
+      <p id="noRecordingNote" class="vb-audio-note" style="display:none;">
+        Для этой сессии файла записи нет в БД: запись могла быть отключена, не хватило места на диске, звонок оборвался до сохранения или путь недоступен контейнеру admin-panel.
+      </p>
+      <div id="audioPlayerWrap" style="display:none;">
+        <p class="vb-audio-note"><strong>Прослушать в браузере</strong> — стерео WAV: <strong>левый канал — клиент</strong> (сверяйте с текстом STT в таблице реплик), правый — бот.</p>
+        <audio id="detailAudio" controls preload="metadata" style="width:100%;max-width:560px"></audio>
+      </div>
+      <h3>События перевода</h3>
+      <table>
+        <thead>
+          <tr><th>Время</th><th>Отдел</th><th>Админ-причина</th><th>Exten</th><th>Потребность</th><th>AMI</th></tr>
+        </thead>
+        <tbody id="transfersBody"></tbody>
+      </table>
+      <h3 id="vbTranscriptBlock">Журнал реплик (STT клиента и текст бота)</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Роль</th><th>Текст</th><th>Время</th><th></th></tr>
+        </thead>
+        <tbody id="transcriptBody"></tbody>
+      </table>
+    </section>
+
+    <section class="table-wrap">
+      <h2>Статистика за 30 дней (сессии голосового бота)</h2>
+      <p class="vb-summary-note">
+        Фиксированное окно: <strong>последние 30 календарных дней</strong> (включая сегодня), по дате начала сессии (<code>started_at</code>).
+        <strong>Контакты</strong> — все записи в <code>voice_bot_sessions</code> за день.
+        <strong>Переводов AMI OK</strong> — сессии, где в журнале есть событие с <code>ami_result = transfer_started</code>.
+        <strong>После 1-й реплики клиента</strong> — среди таких переводов: в транскрипте до времени первого <code>transfer_started</code> ровно одна строка роли <code>client</code>.
+        <strong>Сбросы</strong> — сессии без успешного <code>transfer_started</code> (обрыв, не перевели и т.п.).
+        Доли в столбцах «%» — внутри дня; в блоке итогов — <strong>взвешенные за весь период</strong> (от суммарных числителей к суммарным знаменателям) и отдельно <strong>среднее арифметическое дневных процентов</strong> (см. сноску в таблице).
+      </p>
+      <div style="overflow-x:auto;">
+      <table id="vb30dStatsTable">
+        <thead>
+          <tr>
+            <th>День</th>
+            <th class="vb-num" title="Число сессий voice_bot за календарный день">Контакты</th>
+            <th class="vb-num" title="Сессии с хотя бы одним transfer_started">Переводов AMI OK</th>
+            <th class="vb-num" title="Переводы, где до первого transfer_started ровно 1 реплика client">После 1-й реплики</th>
+            <th class="vb-num" title="Доля от числа переводов AMI OK за день">% от переводов</th>
+            <th class="vb-num" title="Сессии без transfer_started">Сбросов</th>
+            <th class="vb-num" title="Доля сбросов от контактов за день">% сбросов</th>
+          </tr>
+        </thead>
+        <tbody id="vb30dStatsBody"></tbody>
+        <tfoot id="vb30dStatsFoot" style="font-weight:600;background:#f3f4f6;"></tfoot>
+      </table>
+      </div>
+      <p id="vb30dStatsFootnote" class="vb-summary-note" style="margin-top:0.5rem;"></p>
+    </section>
+
+    <section class="table-wrap">
+      <h2>Ошибки распознавания (отметки ОКК)</h2>
+      <div class="feedback-filters">
+        <label>Статус <select id="feedbackStatus">
+          <option value="">все</option>
+          <option value="new" selected>новые</option>
+          <option value="reviewed">проверено</option>
+        </select></label>
+        <button type="button" id="loadFeedback">Обновить список</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Время</th>
+            <th>UUID сессии</th>
+            <th>seq</th>
+            <th>Текст STT</th>
+            <th>Ожидалось</th>
+            <th>Комментарий</th>
+            <th>Кто</th>
+            <th>Статус</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="feedbackBody"></tbody>
+      </table>
+    </section>
+
+    <div id="feedbackModal" class="vb-modal-overlay" aria-hidden="true">
+      <div class="vb-modal">
+        <h3>Ошибка распознавания</h3>
+        <p id="feedbackModalCtx" class="vb-audio-note"></p>
+        <label for="feedbackExpected">Что имел в виду клиент (тег)</label>
+        <select id="feedbackExpected">
+          <option value="">— не указано —</option>
+          <option value="трейд-ин / авто с пробегом">трейд-ин / авто с пробегом</option>
+          <option value="сервис / ТО">сервис / ТО</option>
+          <option value="запчасти">запчасти</option>
+          <option value="Отдел продаж Чери и Тенет">Новые автомобили</option>
+          <option value="Администратор">Звонок с сайта, нажмите 5, чтобы позвонить клиенту</option>
+          <option value="другое (см. комментарий)">другое (см. комментарий)</option>
+        </select>
+        <label for="feedbackComment">Комментарий</label>
+        <textarea id="feedbackComment" placeholder="Кратко: что услышали по факту / что должно было сработать"></textarea>
+        <div class="vb-modal-actions">
+          <button type="button" id="feedbackSubmit">Сохранить отметку</button>
+          <button type="button" id="feedbackCancel">Отмена</button>
+        </div>
+        <p id="feedbackFormError" class="error"></p>
+      </div>
+    </div>
+
+    <p id="loading" style="display:none">Загрузка…</p>
+    <p id="error" class="error"></p>
+  </main>
+  <script>
+  (function() {
+    function parseAdminRoleId() {
+      const v = window.ADMIN_ROLE_ID;
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      const n = parseInt(String(v), 10);
+      return Number.isFinite(n) ? n : null;
+    }
+    const _parsedRole = parseAdminRoleId();
+    const roleId = _parsedRole != null ? _parsedRole : 8;
+    if (roleId != null && roleId <= 3) {
+      document.getElementById('navUpload').style.display = 'none';
+      document.getElementById('navAnalytics').style.display = 'none';
+    }
+    if (roleId === 2 || roleId >= 5) document.getElementById('navSto').style.display = 'inline';
+    document.getElementById('navLogout').onclick = async function() {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+      window.location.href = '/login';
+    };
+
+    const PAGE_SIZE = 100;
+    let currentOffset = 0;
+    let currentDetailUuid = '';
+    let pendingFeedbackSeq = null;
+    let _vbSessionsHScrollCleanup = null;
+
+    function esc(s) {
+      if (s == null) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    }
+
+    /** ISO из API (напр. 2026-04-09T19:03:42.257231+04:00) → «2026-04-09 19:03:42» без долей секунды и без смещения. */
+    function formatAdminDateTime(iso) {
+      if (iso == null || iso === '') return '';
+      var s = String(iso).trim();
+      if (!s) return '';
+      s = s.replace('T', ' ');
+      s = s.replace(/\.\d+/, '');
+      s = s.replace(/Z$/i, '');
+      s = s.replace(/[+-]\d{2}:\d{2}$/, '');
+      return s.trim();
+    }
+
+    /**
+     * Код из voice_bot_transfer_events → формулировка отдела, как у бота.
+     * Устаревшие технические коды в БД (без отдельного направления в сценарии) — «—».
+     */
+    var VOICE_TRANSFER_CATEGORY_RU = {
+      ADMIN: 'Администратор',
+      OP_USED: 'Отдел продаж с пробегом',
+      OP_CHERY_TENET: 'Отдел продаж Чери и Тенет',
+      WORKSHOP_SL: 'Слесарный цех',
+      SERVICE_ASSISTANT: 'Ассистент сервиса',
+      BODY: 'Кузовной цех',
+      PARTS: 'Отдел запчастей'
+    };
+    var VOICE_TRANSFER_CATEGORY_LEGACY = { UNKNOWN: 1, OTHER: 1 };
+    function voiceTransferDepartmentRu(cat) {
+      if (cat == null || String(cat).trim() === '') return '—';
+      var k = String(cat).trim();
+      if (k === 'OP_JETOUR') k = 'OP_CHERY_TENET';
+      if (VOICE_TRANSFER_CATEGORY_LEGACY[k]) return '—';
+      if (VOICE_TRANSFER_CATEGORY_RU[k]) return VOICE_TRANSFER_CATEGORY_RU[k];
+      return '—';
+    }
+
+    function voiceTransferAmiTitle(code) {
+      if (code == null || String(code).trim() === '') {
+        return 'ami_result не записан (нет события перевода или AMI ещё не вызывался)';
+      }
+      var c = String(code).trim();
+      var raw = 'код: ' + c;
+      if (c === 'transfer_started') {
+        return raw + ' — Asterisk вернул Success на Action Redirect (очередь на перевод); факт разговора с оператором не проверяется';
+      }
+      if (c === 'no_operator') return raw + ' — Redirect не принят или нет канала';
+      if (c === 'no_ami_redirect') return raw + ' — WAV не из списка переводов с AMI';
+      return raw;
+    }
+
+    function vbSessionsUpdateHScrollWidths() {
+      var main = document.querySelector('.vb-sessions-hscroll-main');
+      if (!main) return;
+      var table = main.querySelector('table.vb-sessions-table');
+      if (!table) return;
+      /* Только «зеркала» вне table — иначе ячейка colspan + width раздувает таблицу и scrollWidth (петля). */
+      var w = table.scrollWidth;
+      var stack = document.getElementById('vbSessionsScrollStack');
+      if (!stack) return;
+      var topInner = stack.querySelector('.vb-sessions-hscroll-top > .vb-sessions-hscroll-inner');
+      var botInner = stack.querySelector('.vb-sessions-hscroll-bottom > .vb-sessions-hscroll-inner');
+      if (topInner) topInner.style.width = w + 'px';
+      if (botInner) botInner.style.width = w + 'px';
+      var needX = w > main.clientWidth + 2;
+      stack.classList.toggle('vb-sessions-no-x-scroll', !needX);
+    }
+
+    function vbSessionsWireHScrollSync() {
+      var stack = document.getElementById('vbSessionsScrollStack');
+      if (!stack) return;
+      if (_vbSessionsHScrollCleanup) _vbSessionsHScrollCleanup();
+      var nodes = Array.prototype.slice.call(stack.querySelectorAll('.vb-sessions-hscroll'));
+      if (!nodes.length) return;
+      var syncing = false;
+      function onScroll(ev) {
+        if (syncing) return;
+        syncing = true;
+        var left = ev.currentTarget.scrollLeft;
+        nodes.forEach(function(n) { n.scrollLeft = left; });
+        syncing = false;
+      }
+      nodes.forEach(function(n) {
+        n.addEventListener('scroll', onScroll, { passive: true });
+      });
+      _vbSessionsHScrollCleanup = function() {
+        nodes.forEach(function(n) { n.removeEventListener('scroll', onScroll); });
+        _vbSessionsHScrollCleanup = null;
+      };
+      vbSessionsUpdateHScrollWidths();
+      requestAnimationFrame(function() { vbSessionsUpdateHScrollWidths(); });
+      setTimeout(vbSessionsUpdateHScrollWidths, 150);
+      if (!window._vbSessionsHScrollRO) {
+        window._vbSessionsHScrollRO = new ResizeObserver(function() { vbSessionsUpdateHScrollWidths(); });
+      }
+      try {
+        window._vbSessionsHScrollRO.disconnect();
+        var tbl = stack.querySelector('.vb-sessions-hscroll-main table.vb-sessions-table');
+        if (tbl) window._vbSessionsHScrollRO.observe(tbl);
+      } catch (e) { /* старые браузеры без RO */ }
+    }
+
+    if (!window._vbSessionsHScrollResizeBound) {
+      window._vbSessionsHScrollResizeBound = true;
+      window.addEventListener('resize', function() { vbSessionsUpdateHScrollWidths(); });
+    }
+
+    function closeFeedbackModal() {
+      document.getElementById('feedbackModal').classList.remove('open');
+      document.getElementById('feedbackModal').setAttribute('aria-hidden', 'true');
+      document.getElementById('feedbackFormError').textContent = '';
+      pendingFeedbackSeq = null;
+    }
+
+    function openFeedbackModal(seq, sttPreview) {
+      pendingFeedbackSeq = seq;
+      if (seq != null) {
+        document.getElementById('feedbackModalCtx').textContent =
+          'Сессия ' + currentDetailUuid + ', реплика клиента #' + seq +
+          (sttPreview ? ': «' + sttPreview.slice(0, 120) + (sttPreview.length > 120 ? '…' : '') + '»' : '');
+      } else {
+        document.getElementById('feedbackModalCtx').textContent =
+          'Сессия ' + currentDetailUuid + ' (без номера реплики — опишите в комментарии)';
+      }
+      document.getElementById('feedbackComment').value = '';
+      document.getElementById('feedbackExpected').value = '';
+      document.getElementById('feedbackFormError').textContent = '';
+      document.getElementById('feedbackModal').classList.add('open');
+      document.getElementById('feedbackModal').setAttribute('aria-hidden', 'false');
+    }
+
+    document.getElementById('feedbackCancel').onclick = closeFeedbackModal;
+    document.getElementById('feedbackModal').onclick = function(ev) {
+      if (ev.target.id === 'feedbackModal') closeFeedbackModal();
+    };
+
+    document.getElementById('feedbackSubmit').onclick = async function() {
+      const comment = document.getElementById('feedbackComment').value.trim();
+      const tag = document.getElementById('feedbackExpected').value.trim();
+      const errEl = document.getElementById('feedbackFormError');
+      errEl.textContent = '';
+      if (!comment) {
+        errEl.textContent = 'Укажите комментарий';
+        return;
+      }
+      if (!currentDetailUuid) return;
+      const body = {
+        call_uuid: currentDetailUuid,
+        comment: comment,
+        expected_tag: tag || null,
+        transcript_seq: pendingFeedbackSeq != null ? pendingFeedbackSeq : null
+      };
+      try {
+        const r = await fetch('/api/voice-bot/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!r.ok) {
+          const t = await r.json().catch(function() { return {}; });
+          errEl.textContent = t.detail || ('Ошибка ' + r.status);
+          return;
+        }
+        closeFeedbackModal();
+        loadFeedback();
+        document.getElementById('error').textContent = 'Отметка сохранена';
+        setTimeout(function() { document.getElementById('error').textContent = ''; }, 3000);
+      } catch (e) {
+        errEl.textContent = e.message || String(e);
+      }
+    };
+
+    async function loadFeedback() {
+      const st = document.getElementById('feedbackStatus').value;
+      const p = qParams();
+      if (st) p.set('status', st);
+      try {
+        const r = await fetch('/api/voice-bot/feedback?' + p.toString());
+        if (!r.ok) throw new Error('feedback ' + r.status);
+        const rows = await r.json();
+        const tb = document.getElementById('feedbackBody');
+        tb.innerHTML = '';
+        (rows || []).forEach(function(f) {
+          const tr = document.createElement('tr');
+          const uuid = f.call_uuid || '';
+          tr.innerHTML =
+            '<td>' + esc(formatAdminDateTime(f.created_at)) + '</td>' +
+            '<td class="mono" title="' + esc(uuid) + '">' + esc(uuid.slice(0, 12)) + '…</td>' +
+            '<td>' + esc(f.transcript_seq) + '</td>' +
+            '<td>' + esc((f.stt_text_snapshot || '').slice(0, 80)) + '</td>' +
+            '<td>' + esc(f.expected_tag) + '</td>' +
+            '<td>' + esc((f.comment || '').slice(0, 100)) + '</td>' +
+            '<td>' + esc(f.reporter_login) + '</td>' +
+            '<td>' + esc(f.status) + '</td>' +
+            '<td></td>';
+          const tdAct = tr.lastChild;
+          if (f.status === 'new') {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn-stt';
+            b.textContent = 'Проверено';
+            b.onclick = async function() {
+              if (!confirm('Пометить как проверено?')) return;
+              const pr = await fetch('/api/voice-bot/feedback/' + f.id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'reviewed' })
+              });
+              if (pr.ok) loadFeedback();
+            };
+            tdAct.appendChild(b);
+          }
+          tb.appendChild(tr);
+        });
+      } catch (e) {
+        document.getElementById('error').textContent = e.message;
+      }
+    }
+
+    document.getElementById('loadFeedback').onclick = loadFeedback;
+    document.getElementById('feedbackStatus').onchange = loadFeedback;
+
+    function startWithServerDates(cfg) {
+      // По умолчанию один календарный день (TZ отчёта), иначе часто ждут только «сегодня», а week_ago..today тянет лишние дни.
+      document.getElementById('dateFrom').value = cfg.today;
+      document.getElementById('dateTo').value = cfg.today;
+      setExportLinks();
+      loadStats30d();
+      loadSummary();
+      loadSessions(0);
+      loadFeedback();
+    }
+
+    function qParams() {
+      var df = document.getElementById('dateFrom').value;
+      var dt = document.getElementById('dateTo').value;
+      if (df && !dt) dt = df;
+      if (dt && !df) df = dt;
+      const p = new URLSearchParams();
+      if (df) p.set('date_from', df);
+      if (dt) p.set('date_to', dt);
+      return p;
+    }
+
+    function formatPctRu(v) {
+      if (v == null || v === '') return '—';
+      var n = Number(v);
+      if (isNaN(n)) return '—';
+      return String(n).replace('.', ',') + '%';
+    }
+
+    function loadStats30d() {
+      fetch('/api/voice-bot/stats-30d')
+        .then(function(r) { if (!r.ok) throw new Error('Статистика 30д: ' + r.status); return r.json(); })
+        .then(function(data) {
+          const tb = document.getElementById('vb30dStatsBody');
+          const tf = document.getElementById('vb30dStatsFoot');
+          const fn = document.getElementById('vb30dStatsFootnote');
+          tb.innerHTML = '';
+          (data.days || []).forEach(function(row) {
+            const tr = document.createElement('tr');
+            [
+              row.day,
+              row.contacts,
+              row.transfers_ok,
+              row.transfers_after_first_client_only,
+              formatPctRu(row.pct_first_reply_of_transfers),
+              row.hangups,
+              formatPctRu(row.pct_hangup_of_contacts)
+            ].forEach(function(cell, i) {
+              const td = document.createElement('td');
+              td.textContent = cell != null && cell !== '' ? String(cell) : '';
+              if (i > 0) td.className = 'vb-num';
+              tr.appendChild(td);
+            });
+            tb.appendChild(tr);
+          });
+          const agg = data.aggregate || {};
+          const row1 = document.createElement('tr');
+          [
+            'Итого (доли по сумме за период)',
+            agg.contacts,
+            agg.transfers_ok,
+            agg.transfers_after_first_client_only,
+            formatPctRu(agg.pct_first_reply_of_transfers),
+            agg.hangups,
+            formatPctRu(agg.pct_hangup_of_contacts)
+          ].forEach(function(cell, i) {
+            const td = document.createElement('td');
+            td.textContent = cell != null && cell !== '' ? String(cell) : '';
+            if (i > 0) td.className = 'vb-num';
+            row1.appendChild(td);
+          });
+          const row2 = document.createElement('tr');
+          [
+            'Среднее арифм. дневных %',
+            '—', '—', '—',
+            formatPctRu(data.avg_daily_pct_first_reply_of_transfers),
+            '—',
+            formatPctRu(data.avg_daily_pct_hangup_of_contacts)
+          ].forEach(function(cell, i) {
+            const td = document.createElement('td');
+            td.textContent = cell;
+            if (i > 0) td.className = 'vb-num';
+            row2.appendChild(td);
+          });
+          tf.innerHTML = '';
+          tf.appendChild(row1);
+          tf.appendChild(row2);
+          fn.textContent =
+            'Среднее по дням: для «% от переводов» — только дни с хотя бы одним переводом AMI OK; для «% сбросов» — дни с хотя бы одним контактом. Границы периода (дата по серверу БД): '
+            + (data.period_from || '') + ' — ' + (data.period_to || '') + '.';
+        })
+        .catch(function(e) {
+          var tb = document.getElementById('vb30dStatsBody');
+          if (tb) tb.innerHTML = '';
+          var errEl = document.getElementById('error');
+          if (errEl) errEl.textContent = (errEl.textContent ? errEl.textContent + '; ' : '') + e.message;
+        });
+    }
+
+    function loadSummary() {
+      const p = qParams();
+      fetch('/api/voice-bot/daily-summary?' + p.toString())
+        .then(function(r) { if (!r.ok) throw new Error('Сводка: ' + r.status); return r.json(); })
+        .then(function(rows) {
+          const tb = document.getElementById('summaryBody');
+          tb.innerHTML = '';
+          (rows || []).forEach(function(row) {
+            const tr = document.createElement('tr');
+            const cells = [
+              row.day,
+              row.sessions_total,
+              row.sessions_with_transfer,
+              row.xfer_admin,
+              row.xfer_service_assistant,
+              row.xfer_op_chery_tenet,
+              row.xfer_body,
+              row.xfer_op_used,
+              row.xfer_parts,
+              row.sessions_no_transfer
+            ];
+            cells.forEach(function(cell, i) {
+              const td = document.createElement('td');
+              td.textContent = cell != null ? String(cell) : '';
+              if (i > 0) td.className = 'vb-num';
+              tr.appendChild(td);
+            });
+            tb.appendChild(tr);
+          });
+        })
+        .catch(function(e) { document.getElementById('error').textContent = e.message; });
+    }
+
+    function sessionListParams(offset) {
+      const p = qParams();
+      p.set('limit', String(PAGE_SIZE));
+      p.set('offset', String(offset != null ? offset : currentOffset));
+      p.set('order', document.getElementById('sessionOrder').value || 'desc');
+      const tf = document.getElementById('sessionTransfer').value;
+      if (tf) p.set('transfer', tf);
+      return p;
+    }
+
+    function loadSessions(offset) {
+      currentOffset = offset || 0;
+      const loading = document.getElementById('loading');
+      const errEl = document.getElementById('error');
+      loading.style.display = 'block';
+      errEl.textContent = '';
+      const p = sessionListParams(currentOffset);
+      fetch('/api/voice-bot/sessions?' + p.toString())
+        .then(function(r) { if (!r.ok) throw new Error('Список: ' + r.status); return r.json(); })
+        .then(function(rows) {
+          loading.style.display = 'none';
+          const tb = document.getElementById('sessionsBody');
+          tb.innerHTML = '';
+          const list = rows || [];
+          list.forEach(function(s, i) {
+            const tr = document.createElement('tr');
+            const uuid = s.call_uuid || '';
+            const hasRec = !!(s.audio_storage_path && String(s.audio_storage_path).trim());
+            const rowNum = currentOffset + i + 1;
+            tr.innerHTML =
+              '<td class="vb-row-num">' + rowNum + '</td>' +
+              '<td>' + esc(formatAdminDateTime(s.started_at)) + '</td>' +
+              '<td class="mono">' + (s.caller_phone ? esc(String(s.caller_phone)) : '—') + '</td>' +
+              '<td>' + (s.recognized_client_name ? esc(String(s.recognized_client_name)) : '—') + '</td>' +
+              '<td class="vb-stt-cell" title="' + (s.client_request_stt ? esc(String(s.client_request_stt)) : '') + '">' +
+                (s.client_request_stt ? esc(String(s.client_request_stt)) : '—') +
+              '</td>' +
+              '<td>' + (s.state_final || '') + '</td>' +
+              '<td>' + (s.client_turns != null ? s.client_turns : '') + ' / ' + (s.bot_turns != null ? s.bot_turns : '') + '</td>' +
+              '<td>' + esc(voiceTransferDepartmentRu(s.last_transfer_category)) + '</td>' +
+              '<td class="mono" title="' + esc(voiceTransferAmiTitle(s.last_transfer_ami_result)) + '">' +
+                esc(s.last_transfer_ami_result != null && s.last_transfer_ami_result !== '' ? String(s.last_transfer_ami_result) : '—') +
+              '</td>' +
+              '<td class="vb-rec-cell"></td>' +
+              '<td class="vb-col-actions"><button type="button" class="btn-detail" data-uuid="' + uuid + '">Открыть</button></td>';
+            const recTd = tr.querySelector('.vb-rec-cell');
+            if (hasRec && uuid) {
+              const yes = document.createElement('span');
+              yes.textContent = 'да ';
+              recTd.appendChild(yes);
+              const lb = document.createElement('button');
+              lb.type = 'button';
+              lb.className = 'btn-stt';
+              lb.textContent = 'Слушать';
+              lb.setAttribute('data-uuid', uuid);
+              lb.onclick = function() { openDetail(uuid, { focusRecording: true }); };
+              recTd.appendChild(lb);
+              recTd.title = String(s.audio_storage_path || '');
+            } else {
+              recTd.textContent = '—';
+              recTd.title = 'Нет сохранённого файла';
+            }
+            tb.appendChild(tr);
+          });
+          vbSessionsWireHScrollSync();
+          document.querySelectorAll('.btn-detail').forEach(function(btn) {
+            btn.onclick = function() { openDetail(btn.getAttribute('data-uuid')); };
+          });
+          const pag = document.getElementById('pagination');
+          if ((rows || []).length >= PAGE_SIZE || currentOffset > 0) {
+            pag.style.display = 'flex';
+            const n = (rows || []).length;
+            const fromN = n ? currentOffset + 1 : 0;
+            const toN = currentOffset + n;
+            document.getElementById('pageInfo').textContent =
+              n ? ('№ ' + fromN + '–' + toN + ' (offset ' + currentOffset + ')') : ('offset ' + currentOffset);
+          } else {
+            pag.style.display = 'none';
+          }
+        })
+        .catch(function(e) {
+          loading.style.display = 'none';
+          errEl.textContent = e.message;
+        });
+    }
+
+    function openDetail(uuid, opts) {
+      if (!uuid) return;
+      opts = opts || {};
+      currentDetailUuid = uuid;
+      const audioEl = document.getElementById('detailAudio');
+      audioEl.oncanplay = null;
+      audioEl.removeAttribute('src');
+      audioEl.load();
+      document.getElementById('detailSection').style.display = 'block';
+      document.getElementById('detailUuid').textContent = uuid;
+      document.getElementById('recLink').href = '/api/voice-bot/sessions/detail/' + encodeURIComponent(uuid) + '/recording';
+      document.getElementById('noRecordingNote').style.display = 'none';
+      fetch('/api/voice-bot/sessions/detail/' + encodeURIComponent(uuid))
+        .then(function(r) { if (!r.ok) throw new Error('Детали: ' + r.status); return r.json(); })
+        .then(function(data) {
+          const sess = data.session || {};
+          const phRow = document.getElementById('detailCallerPhone');
+          const phVal = document.getElementById('detailCallerPhoneVal');
+          if (sess.caller_phone) {
+            phVal.textContent = String(sess.caller_phone);
+            phRow.style.display = 'block';
+          } else {
+            phRow.style.display = 'none';
+          }
+          const recWrap = document.getElementById('recLinkWrap');
+          const hasRec = !!sess.audio_storage_path;
+          recWrap.style.display = hasRec ? 'inline' : 'none';
+          const noNote = document.getElementById('noRecordingNote');
+          noNote.style.display = hasRec ? 'none' : 'block';
+          const aw = document.getElementById('audioPlayerWrap');
+          if (hasRec) {
+            aw.style.display = 'block';
+            audioEl.src = '/api/voice-bot/sessions/detail/' + encodeURIComponent(uuid) + '/recording';
+            if (opts.focusRecording) {
+              document.getElementById('detailSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+              setTimeout(function() { aw.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 200);
+              audioEl.oncanplay = function() {
+                audioEl.oncanplay = null;
+                audioEl.play().catch(function() {});
+              };
+            }
+          } else {
+            aw.style.display = 'none';
+            if (opts.focusRecording) {
+              document.getElementById('detailSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+              setTimeout(function() {
+                var el = document.getElementById('vbTranscriptBlock');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }, 300);
+            }
+          }
+
+          const ttb = document.getElementById('transfersBody');
+          ttb.innerHTML = '';
+          (data.transfers || []).forEach(function(e) {
+            const tr = document.createElement('tr');
+            [formatAdminDateTime(e.logged_at), voiceTransferDepartmentRu(e.transfer_category), e.admin_reason, e.exten, e.client_need]
+              .forEach(function(c) {
+                const td = document.createElement('td');
+                td.textContent = c != null && c !== '' ? String(c) : '';
+                tr.appendChild(td);
+              });
+            const tdAmi = document.createElement('td');
+            tdAmi.className = 'mono';
+            tdAmi.title = voiceTransferAmiTitle(e.ami_result);
+            tdAmi.textContent = e.ami_result != null && e.ami_result !== '' ? String(e.ami_result) : '—';
+            tr.appendChild(tdAmi);
+            ttb.appendChild(tr);
+          });
+
+          const trb = document.getElementById('transcriptBody');
+          trb.innerHTML = '';
+          (data.transcript || []).forEach(function(t) {
+            const tr = document.createElement('tr');
+            const role = (t.role || '').toLowerCase();
+            [t.seq, t.role, t.text, formatAdminDateTime(t.logged_at)].forEach(function(c) {
+              const td = document.createElement('td');
+              td.textContent = c != null ? String(c) : '';
+              tr.appendChild(td);
+            });
+            const tdAct = document.createElement('td');
+            if (role === 'client' && t.seq != null) {
+              const b = document.createElement('button');
+              b.type = 'button';
+              b.className = 'btn-stt';
+              b.textContent = 'оцени реплику';
+              b.onclick = function() { openFeedbackModal(t.seq, t.text || ''); };
+              tdAct.appendChild(b);
+            }
+            tr.appendChild(tdAct);
+            trb.appendChild(tr);
+          });
+        })
+        .catch(function(e) { document.getElementById('error').textContent = e.message; });
+    }
+
+    document.getElementById('closeDetail').onclick = function(e) {
+      e.preventDefault();
+      document.getElementById('detailSection').style.display = 'none';
+    };
+
+    document.getElementById('feedbackSessionLink').onclick = function(e) {
+      e.preventDefault();
+      if (!currentDetailUuid) return;
+      openFeedbackModal(null, '');
+    };
+
+    /** Синхронизация пары дат, экспорт и перезагрузка таблиц (в т.ч. после смены даты в календаре). */
+    function applyDateFilters() {
+      var fe = document.getElementById('dateFrom');
+      var te = document.getElementById('dateTo');
+      if (fe.value && !te.value) te.value = fe.value;
+      if (te.value && !fe.value) fe.value = te.value;
+      setExportLinks();
+      loadStats30d();
+      loadSummary();
+      loadSessions(0);
+      loadFeedback();
+    }
+
+    document.getElementById('applyFilters').onclick = applyDateFilters;
+    document.getElementById('dateFrom').addEventListener('change', applyDateFilters);
+    document.getElementById('dateTo').addEventListener('change', applyDateFilters);
+
+    document.getElementById('prevPage').onclick = function() {
+      if (currentOffset >= PAGE_SIZE) loadSessions(currentOffset - PAGE_SIZE);
+    };
+    document.getElementById('nextPage').onclick = function() {
+      loadSessions(currentOffset + PAGE_SIZE);
+    };
+
+    function setExportLinks() {
+      const p = qParams();
+      p.set('order', document.getElementById('sessionOrder').value || 'desc');
+      const tf = document.getElementById('sessionTransfer').value;
+      if (tf) p.set('transfer', tf);
+      p.set('fmt', 'csv');
+      document.getElementById('exportCsv').href = '/api/voice-bot/export?' + p.toString();
+      p.set('fmt', 'xlsx');
+      document.getElementById('exportXlsx').href = '/api/voice-bot/export?' + p.toString();
+    }
+    document.getElementById('sessionOrder').addEventListener('change', function() {
+      setExportLinks();
+      loadSessions(0);
+    });
+    document.getElementById('sessionTransfer').addEventListener('change', function() {
+      setExportLinks();
+      loadSessions(0);
+    });
+
+    fetch('/api/admin_config', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(startWithServerDates)
+      .catch(function () {
+        var today = new Date().toISOString().slice(0, 10);
+        startWithServerDates({ today: today, week_ago: today });
+      });
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# torch/torchaudio уже в образе 2.7; constraints не дают тянуть другие версии
+torchaudio>=2.7.0,<2.8.0
+fastapi
+uvicorn[standard]
+python-multipart
+faster-whisper
+numpy
+scipy
+soundfile
+python-dotenv
+redis
+cryptography
+transformers>=4.40.0
+pyannote.audio
+sentencepiece
+accelerate
+hydra-core
+omegaconf
+huggingface_hub

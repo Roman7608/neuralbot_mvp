@@ -1,0 +1,20 @@
+FROM python:3.10-slim
+
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY services/tts/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt soundfile
+
+COPY services/tts/main.py /app/main.py
+COPY licensing/ /app/licensing/
+COPY license.key /app/license.key
+
+EXPOSE 8002
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]

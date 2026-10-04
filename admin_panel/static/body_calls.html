@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Кузовной цех — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Кузовной цех</h1>
+    <nav>
+      <a href="/">Звонки</a>
+      <a href="/upload" id="navUpload">Загрузка</a>
+      <a href="/leads">Лиды</a>
+      <a href="/analytics" id="navAnalytics">Аналитика</a>
+      <a href="/body-calls" class="nav-active">Кузовной цех</a>
+      <a href="/voice-transfers" id="navVoiceBot" style="display:none">Переводы бота</a>
+      <a href="/sto" id="navSto" style="display:none">СТО</a>
+      <button type="button" class="nav-logout" id="navLogout">Завершить сеанс</button>
+    </nav>
+  </header>
+  <main>
+    <section class="filters">
+      <div class="filter-row">
+        <div class="filter-field"><label>Период: <input type="date" id="dateFrom"> — <input type="date" id="dateTo"></label></div>
+        <div class="filter-field"><label id="managerLabel">Менеджер: <select id="manager"><option value="">Все</option></select></label></div>
+        <div class="filter-field"><label>Вид: <select id="callType"><option value="">Все</option><option value="STO_IN">СТО вх.</option><option value="STO_OUT">СТО исх.</option><option value="OTHER">Прочие</option></select></label></div>
+        <button type="button" id="applyFilters">Применить</button>
+      </div>
+    </section>
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-id">ID</th>
+            <th>Дата</th>
+            <th>Время</th>
+            <th>Номер</th>
+            <th>Отдел</th>
+            <th>Тип</th>
+            <th>Источник</th>
+            <th>Балл</th>
+            <th>Статус</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="callsBody"></tbody>
+      </table>
+    </section>
+    <nav id="pagination" class="pagination" style="display:none;">
+      <button type="button" id="prevPage">← Назад</button>
+      <span id="pageInfo"></span>
+      <button type="button" id="nextPage">Вперёд →</button>
+    </nav>
+    <p id="loading">Загрузка…</p>
+    <p id="error" class="error"></p>
+  </main>
+  <script>
+    (function() {
+      function parseAdminRoleId() {
+        const v = window.ADMIN_ROLE_ID;
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        const n = parseInt(String(v), 10);
+        return Number.isFinite(n) ? n : null;
+      }
+      const roleId = parseAdminRoleId();
+      if (roleId == null) {
+        const er = document.getElementById('error');
+        if (er) er.textContent = 'Не удалось определить роль.';
+      }
+      if (roleId === 8) {
+        const nv = document.getElementById('navVoiceBot');
+        if (nv) nv.style.display = 'inline';
+      }
+      if (roleId != null && roleId <= 3) {
+        document.getElementById('navUpload').style.display = 'none';
+        document.getElementById('navAnalytics').style.display = 'none';
+      }
+      if (roleId === 2 || roleId >= 5) document.getElementById('navSto').style.display = 'inline';
+      document.getElementById('navLogout').onclick = async function() {
+        try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+        window.location.href = '/login';
+      };
+
+      const dateFrom = document.getElementById('dateFrom');
+      const dateTo = document.getElementById('dateTo');
+      const manager = document.getElementById('manager');
+      const callType = document.getElementById('callType');
+      const tbody = document.getElementById('callsBody');
+      const loading = document.getElementById('loading');
+      const errEl = document.getElementById('error');
+      const pagination = document.getElementById('pagination');
+      const prevBtn = document.getElementById('prevPage');
+      const nextBtn = document.getElementById('nextPage');
+      const pageInfo = document.getElementById('pageInfo');
+      const PAGE_SIZE = 100;
+      let currentOffset = 0;
+
+      function loadManagers() {
+        fetch('/api/calls/managers?department=' + encodeURIComponent('STO'), { cache: 'no-store' })
+          .then(r => r.ok ? r.json() : [])
+          .then(rows => {
+            const prev = manager.value;
+            manager.innerHTML = '<option value="">Все</option>';
+            (rows || []).forEach(r => {
+              const opt = document.createElement('option');
+              opt.value = r.manager_name || '';
+              opt.textContent = r.display || r.manager_name || '';
+              manager.appendChild(opt);
+            });
+            if (prev) manager.value = prev;
+          })
+          .catch(() => { manager.innerHTML = '<option value="">Все</option>'; });
+      }
+
+      function renderList(offset) {
+        if (offset === undefined) offset = 0;
+        currentOffset = offset;
+        loading.style.display = 'block';
+        errEl.textContent = '';
+        const params = new URLSearchParams();
+        params.set('order', 'asc');
+        if (dateFrom.value) params.set('date_from', dateFrom.value);
+        if (dateTo.value) params.set('date_to', dateTo.value);
+        if (manager.value) params.set('manager_name', manager.value);
+        if (callType.value) params.set('call_type', callType.value);
+        params.set('limit', String(PAGE_SIZE));
+        params.set('offset', String(offset));
+        fetch('/api/body-calls?' + params, { cache: 'no-store' })
+          .then(r => r.json().then(data => ({ ok: r.ok, data: data })))
+          .then(res => {
+            if (!res.ok) throw new Error(res.data && res.data.detail ? res.data.detail : 'Ошибка сервера');
+            const rows = Array.isArray(res.data) ? res.data : [];
+            loading.style.display = 'none';
+            tbody.innerHTML = rows.map(r => {
+              const ctLabels = { OP_IN: 'ОП вх.', OP_OUT: 'ОП исх.', STO_IN: 'СТО вх.', STO_OUT: 'СТО исх.', OTHER: 'Прочие' };
+              const ctText = ctLabels[r.call_type] || (r.call_type || '—');
+              return '<tr>'
+                + '<td class="col-id">' + (r.id || '') + '</td>'
+                + '<td>' + (r.call_date || '-') + '</td>'
+                + '<td>' + (r.call_time ? String(r.call_time).slice(0, 8) : '-') + '</td>'
+                + '<td>' + (r.internal_number != null ? r.internal_number : '-') + (r.manager_name ? ' (' + r.manager_name + ')' : '') + '</td>'
+                + '<td>' + (r.department === 'OP' ? 'Отдел Продаж' : (r.department === 'STO' ? 'СТО' : (r.department === 'OTHER' ? 'Прочие' : (r.department || '—')))) + '</td>'
+                + '<td>' + ctText + '</td>'
+                + '<td>' + (r.source_type || 'manual') + '</td>'
+                + '<td>' + (r.overall_score != null ? Number(r.overall_score).toFixed(1) : '-') + '</td>'
+                + '<td>' + (r.status || 'pending') + '</td>'
+                + '<td><a href="/call/' + r.id + '">Открыть</a></td>'
+                + '</tr>';
+            }).join('');
+            pagination.style.display = rows.length > 0 ? 'flex' : 'none';
+            if (rows.length > 0) {
+              const pageNum = Math.floor(offset / PAGE_SIZE) + 1;
+              pageInfo.textContent = 'Страница ' + pageNum + ' (звонки ' + (offset + 1) + '–' + (offset + rows.length) + ')';
+              prevBtn.disabled = offset === 0;
+              nextBtn.disabled = rows.length < PAGE_SIZE;
+              prevBtn.onclick = () => renderList(Math.max(0, offset - PAGE_SIZE));
+              nextBtn.onclick = () => renderList(offset + PAGE_SIZE);
+            }
+          })
+          .catch(e => {
+            loading.style.display = 'none';
+            errEl.textContent = 'Ошибка: ' + e.message;
+            tbody.innerHTML = '';
+          });
+      }
+
+      document.getElementById('applyFilters').onclick = () => renderList(0);
+      fetch('/api/admin_config', { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(cfg => {
+          dateFrom.value = cfg.yesterday || new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+          dateTo.value = cfg.today || new Date().toISOString().slice(0, 10);
+          loadManagers();
+          renderList(0);
+        })
+        .catch(() => {
+          dateFrom.value = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+          dateTo.value = new Date().toISOString().slice(0, 10);
+          loadManagers();
+          renderList(0);
+        });
+    })();
+  </script>
+</body>
+</html>

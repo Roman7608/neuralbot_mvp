@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Справочники СТО — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .file-card { border: 1px solid #ddd; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+    .file-card h3 { margin: 0 0 0.5rem 0; }
+    .file-meta { color: #666; font-size: 0.85rem; margin-bottom: 0.75rem; }
+    .file-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .file-actions button { padding: 0.4rem 1rem; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
+    .file-actions button:hover { background: #f0f0f0; }
+    .btn-download { color: #fff; background: #2563eb; border-color: #2563eb; }
+    .btn-download:hover { background: #1d4ed8; }
+    .btn-upload { color: #fff; background: #16a34a; border-color: #16a34a; }
+    .btn-upload:hover { background: #15803d; }
+    .btn-preview { color: #333; }
+    .preview-table { margin-top: 1rem; max-height: 400px; overflow: auto; }
+    .preview-table table { font-size: 0.85rem; }
+    .sheet-tabs { display: flex; gap: 0.3rem; margin-bottom: 0.5rem; }
+    .sheet-tabs button { padding: 0.2rem 0.6rem; border: 1px solid #ccc; border-radius: 3px; background: #f5f5f5; cursor: pointer; font-size: 0.8rem; }
+    .sheet-tabs button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .upload-status { margin-top: 0.5rem; font-size: 0.9rem; }
+    .upload-status.ok { color: #16a34a; }
+    .upload-status.err { color: #c00; }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Справочники СТО</h1>
+    <nav>
+      <a href="/">Звонки</a>
+      <a href="/upload" id="navUpload">Загрузка</a>
+      <a href="/leads">Лиды</a>
+      <a href="/analytics" id="navAnalytics">Аналитика</a>
+      <a href="/voice-transfers" id="navVoiceBot" style="display:none">Переводы бота</a>
+      <a href="/sto" class="nav-active">СТО</a>
+      <button type="button" class="nav-logout" id="navLogout">Завершить сеанс</button>
+    </nav>
+  </header>
+  <main>
+    <p>Файл трудоёмкостей и цен ТО. Скачайте, отредактируйте в Excel и загрузите обратно. При загрузке создаётся резервная копия.</p>
+    <p style="font-size:0.85rem;color:#666;">Расписание слотов и база клиентов управляются через 1С Альфа 6.0.</p>
+    <div id="filesList"></div>
+    <p id="loading">Загрузка...</p>
+    <p id="error" class="error"></p>
+  </main>
+  <script>
+    function parseAdminRoleId() {
+      const v = window.ADMIN_ROLE_ID;
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      const n = parseInt(String(v), 10);
+      return Number.isFinite(n) ? n : null;
+    }
+    const roleId = parseAdminRoleId();
+    if (roleId == null) {
+      const er = document.getElementById('error');
+      if (er) er.textContent = 'Откройте страницу СТО из меню после входа (не /static/sto.html).';
+    }
+    if (roleId === 8) {
+      const nv = document.getElementById('navVoiceBot');
+      if (nv) nv.style.display = 'inline';
+    }
+    document.getElementById('navLogout').onclick = async function() {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+      window.location.href = '/login';
+    };
+    const filesList = document.getElementById('filesList');
+    const loading = document.getElementById('loading');
+    const errEl = document.getElementById('error');
+
+    function fmtSize(b) {
+      if (b < 1024) return b + ' Б';
+      if (b < 1048576) return (b / 1024).toFixed(1) + ' КБ';
+      return (b / 1048576).toFixed(1) + ' МБ';
+    }
+    function fmtDate(iso) {
+      if (!iso) return '—';
+      return iso.replace('T', ' ').slice(0, 19);
+    }
+
+    function loadFiles() {
+      loading.style.display = 'block';
+      errEl.textContent = '';
+      fetch('/api/sto/files').then(r => r.json()).then(files => {
+        loading.style.display = 'none';
+        filesList.innerHTML = '';
+        for (const f of files) {
+          const card = document.createElement('div');
+          card.className = 'file-card';
+          card.id = 'card-' + f.key;
+          card.innerHTML = '<h3>' + f.label + ' (' + f.key + '.xlsx)</h3>'
+            + '<div class="file-meta">'
+            + (f.exists ? 'Размер: ' + fmtSize(f.size) + ' | Обновлён: ' + fmtDate(f.updated) : 'Файл отсутствует')
+            + '</div>'
+            + '<div class="file-actions">'
+            + (f.exists ? '<button class="btn-download" onclick="dl(\'' + f.key + '\')">Скачать</button>' : '')
+            + '<button class="btn-upload" onclick="triggerUpload(\'' + f.key + '\')">Загрузить новый</button>'
+            + (f.exists ? '<button class="btn-preview" onclick="preview(\'' + f.key + '\')">Предпросмотр</button>' : '')
+            + '<input type="file" id="input-' + f.key + '" accept=".xlsx,.xls" style="display:none" onchange="upload(\'' + f.key + '\', this)">'
+            + '</div>'
+            + '<div id="status-' + f.key + '" class="upload-status"></div>'
+            + '<div id="preview-' + f.key + '" class="preview-table"></div>';
+          filesList.appendChild(card);
+        }
+      }).catch(e => {
+        loading.style.display = 'none';
+        errEl.textContent = 'Ошибка: ' + e.message;
+      });
+    }
+
+    function dl(key) {
+      window.location.href = '/api/sto/files/' + key + '/download';
+    }
+
+    function triggerUpload(key) {
+      document.getElementById('input-' + key).click();
+    }
+
+    function upload(key, input) {
+      if (!input.files.length) return;
+      const statusEl = document.getElementById('status-' + key);
+      statusEl.className = 'upload-status';
+      statusEl.textContent = 'Загрузка...';
+      const fd = new FormData();
+      fd.append('file', input.files[0]);
+      fetch('/api/sto/files/' + key + '/upload', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(res => {
+          if (res.ok) {
+            statusEl.className = 'upload-status ok';
+            statusEl.textContent = 'Загружено (' + fmtSize(res.size) + '). Бэкап: ' + res.backup;
+            loadFiles();
+          } else {
+            statusEl.className = 'upload-status err';
+            statusEl.textContent = 'Ошибка: ' + (res.detail || JSON.stringify(res));
+          }
+        })
+        .catch(e => {
+          statusEl.className = 'upload-status err';
+          statusEl.textContent = 'Ошибка: ' + e.message;
+        });
+      input.value = '';
+    }
+
+    function preview(key, sheet) {
+      const el = document.getElementById('preview-' + key);
+      el.innerHTML = 'Загрузка...';
+      const params = sheet ? '?sheet=' + encodeURIComponent(sheet) : '';
+      fetch('/api/sto/files/' + key + '/preview' + params).then(r => r.json()).then(data => {
+        let html = '';
+        if (data.sheets && data.sheets.length > 1) {
+          html += '<div class="sheet-tabs">';
+          for (const s of data.sheets) {
+            const cls = s === data.current_sheet ? 'active' : '';
+            html += '<button class="' + cls + '" onclick="preview(\'' + key + '\',\'' + s + '\')">' + s + '</button>';
+          }
+          html += '</div>';
+        }
+        html += '<table><thead><tr>';
+        for (const c of data.columns) html += '<th>' + c + '</th>';
+        html += '</tr></thead><tbody>';
+        for (const row of data.rows) {
+          html += '<tr>';
+          for (const cell of row) html += '<td>' + cell + '</td>';
+          html += '</tr>';
+        }
+        html += '</tbody></table>';
+        if (data.total_shown) html += '<p style="font-size:0.8rem;color:#666;">Показано строк: ' + data.total_shown + '</p>';
+        el.innerHTML = html;
+      }).catch(e => {
+        el.innerHTML = '<span class="error">Ошибка: ' + e.message + '</span>';
+      });
+    }
+
+    loadFiles();
+  </script>
+</body>
+</html>

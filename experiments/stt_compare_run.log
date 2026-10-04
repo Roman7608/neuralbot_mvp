@@ -1,0 +1,7 @@
+hypothesis	ok	empty	halluc	other
+H0_base	2	3	5	0
+H1_prompt	2	3	5	0
+H2_loud8db	2	3	3	2
+H3_trim	0	2	7	1
+H4_loudtrim+prompt	0	3	6	1
+Полная таблица: /tmp/stt_ab_457599/all.tsv

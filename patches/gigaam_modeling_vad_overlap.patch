@@ -1,0 +1,71 @@
+--- modeling_gigaam.py
++++ modeling_gigaam.py
+@@ -290,7 +290,8 @@
+ 
+     model = Model.from_pretrained("pyannote/segmentation-3.0", use_auth_token=hf_token)
+     _PIPELINE = VoiceActivityDetection(segmentation=model)
+-    _PIPELINE.instantiate({"min_duration_on": 0.0, "min_duration_off": 0.0})
++    min_off = float(os.environ.get("GIGAAM_VAD_MIN_DURATION_OFF", "1.0"))
++    _PIPELINE.instantiate({"min_duration_on": 0.0, "min_duration_off": min_off})
+ 
+     return _PIPELINE.to(device)
+ 
+@@ -302,13 +303,14 @@
+     min_duration: float = 15.0,
+     strict_limit_duration: float = 30.0,
+     new_chunk_threshold: float = 0.2,
++    overlap_sec: float = 1.0,
+     device: torch.device = torch.device("cpu"),
+ ) -> Tuple[List[torch.Tensor], List[Tuple[float, float]]]:
+     """
+     Segments an audio waveform into smaller chunks based on speech activity.
+     The segmentation is performed using a PyAnnote voice activity detection pipeline.
++    overlap_sec: overlap between consecutive segments (extended by overlap_sec/2 on each side).
+     """
+-
+     audio = load_audio(wav_file)
+     pipeline = get_pipeline(device)
+     sad_segments = pipeline(wav_file)
+@@ -318,18 +320,25 @@
+     curr_start = 0.0
+     curr_end = 0.0
+     boundaries: List[Tuple[float, float]] = []
++    audio_len_sec = audio.shape[0] / sr
++    half_overlap = overlap_sec / 2.0
++
++    def _extract_with_overlap(s: float, e: float):
++        start_ext = max(0.0, s - half_overlap)
++        end_ext = min(audio_len_sec, e + half_overlap)
++        return audio[int(start_ext * sr) : int(end_ext * sr)]
+ 
+     def _update_segments(curr_start: float, curr_end: float, curr_duration: float):
+         if curr_duration > strict_limit_duration:
+             max_segments = int(curr_duration / strict_limit_duration) + 1
+             segment_duration = curr_duration / max_segments
+-            curr_end = curr_start + segment_duration
++            c_end = curr_start + segment_duration
+             for _ in range(max_segments - 1):
+-                segments.append(audio[int(curr_start * sr) : int(curr_end * sr)])
+-                boundaries.append((curr_start, curr_end))
+-                curr_start = curr_end
+-                curr_end += segment_duration
+-        segments.append(audio[int(curr_start * sr) : int(curr_end * sr)])
++                segments.append(_extract_with_overlap(curr_start, c_end))
++                boundaries.append((curr_start, c_end))
++                curr_start = c_end
++                c_end += segment_duration
++        segments.append(_extract_with_overlap(curr_start, curr_end))
+         boundaries.append((curr_start, curr_end))
+ 
+     # Concat segments from pipeline into chunks for asr according to max/min duration
+@@ -1411,8 +1420,8 @@
+     def transcribe(self, wav_file: str) -> str:
+         return self.model.transcribe(wav_file)
+ 
+-    def transcribe_longform(self, wav_file: str) -> List[Dict[str, Union[str, Tuple[float, float]]]]:
+-        return self.model.transcribe_longform(wav_file)
++    def transcribe_longform(self, wav_file: str, **kwargs) -> List[Dict[str, Union[str, Tuple[float, float]]]]:
++        return self.model.transcribe_longform(wav_file, **kwargs)
+ 
+     def get_probs(self, wav_file: str) -> Dict[str, float]:
+         return self.model.get_probs(wav_file)

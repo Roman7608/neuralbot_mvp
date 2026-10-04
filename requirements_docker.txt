@@ -1,0 +1,17 @@
+# Admin panel + Telegram bot + shared deps
+fastapi
+uvicorn[standard]
+httpx
+python-multipart
+bcrypt
+psycopg2-binary
+python-dotenv
+pandas
+openpyxl
+soundfile
+numpy
+aiogram==3.1.1
+APScheduler==3.10.4
+phonenumbers
+aiohttp
+cryptography

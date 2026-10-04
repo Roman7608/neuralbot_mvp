@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+torch
+numpy
+scipy
+soundfile
+python-dotenv
+cryptography

@@ -1,0 +1,104 @@
+================================================================================
+VikingiAll — фиксация изменений (админка / лиды / голосовой бот) и выкат на server7
+Дата записи: 2026-04-02, обновление 2026-04-06
+================================================================================
+
+1. АДМИН-ПАНЕЛЬ «ЛИДЫ» (admin_panel/static/leads.html, admin_panel/main.py)
+--------------------------------------------------------------------------------
+- Таблица лидов: колонки по авто (марка, модель, год, пробег) и «Пожелания по работам»;
+  экранирование текста (escHtml) в ячейках.
+- API / экспорт (CSV, XLSX): расширенный набор полей, в т.ч. work_wishes и need_text
+  (fallback), согласовано с отображением в таблице.
+- Фильтры «Источник» / «Нерабочие» — учитывать: лиды голосового бота в БД с source=phone;
+  рабочие часы 08:00–21:00 по времени в БД (см. п. 4).
+
+2. БАЗА ЛИДОВ (database/postgresql_manager.py — TelegramLeadsDB)
+--------------------------------------------------------------------------------
+- list_leads: в выборку добавлены car_brand, car_model, car_year, car_mileage, work_wishes.
+- save_lead: явная запись created_at и updated_at «стеночным» временем дилера через
+  POSTGRESQL_SESSION_TIMEZONE (ZoneInfo), а не только DEFAULT CURRENT_TIMESTAMP в PostgreSQL
+  — время в админке и фильтры по дате/«время суток» согласованы с местным временем.
+- update_lead_append: updated_at задаётся тем же способом.
+
+3. ГОЛОСОВОЙ БОТ — ТЕЛЕФОН В ЛИДЕ (AudioSocket не передаёт ANI)
+--------------------------------------------------------------------------------
+- asterisk/conf/extensions.conf: перед AudioSocket в AstDB пишется
+  DB(vikingi_ani/${UUID_KEY})=${ORIG_ANI} (оба входа: exten s и _X.).
+- asterisk_transfer.py: fetch_caller_ani_by_session_key() — AMI DBGet family vikingi_ani.
+- services/voice/session.py: при старте звонка _resolve_caller_phone_from_astdb() задаёт
+  caller_phone для bot_logic / save_lead (нерабочее время и др.).
+- dialog/leads_manager.py: source по умолчанию phone для голоса; Excel-ветка — дата/время
+  по POSTGRESQL_SESSION_TIMEZONE.
+
+ВАЖНО ПО ASTERISK: conf копируется в образ при сборке (asterisk/Dockerfile →
+/etc/asterisk-templates/). Правка extensions.conf на диске БЕЗ пересборки контейнера
+asterisk в работающем контейнере не подхватится. После правки conf нужна пересборка
+образа asterisk и перезапуск сервиса (см. команды ниже). dialplan reload нужен, если
+конфиг уже обновлён внутри контейнера без пересборки.
+
+4. ВРЕМЯ / ЧАСОВОЙ ПОЯС
+--------------------------------------------------------------------------------
+- Рекомендуется в .env: TZ=Europe/Samara для всех релевантных сервисов.
+- При пустом TZ в контейнере: POSTGRESQL_SESSION_TIMEZONE=Europe/Samara (читает
+  postgresql_config.py).
+- Старые строки telegram_leads с неверным временем автоматически не исправляются.
+
+5. AMI ДЛЯ НОМЕРА ЗВОНЯЩЕГО (voice-bot)
+--------------------------------------------------------------------------------
+- Если ASTERISK_AMI_HOST пустой (docker-compose: ${ASTERISK_AMI_HOST:-}), AMI не
+  подключается — в логах voice-bot: «caller ANI not in AstDB or AMI unavailable».
+- Задать в .env на server7 (имена сервисов Docker-сети), например:
+    ASTERISK_AMI_HOST=asterisk
+    ASTERISK_AMI_PORT=5038
+    ASTERISK_AMI_USER=<как в manager.conf>
+    ASTERISK_AMI_SECRET=<как в manager.conf>
+  Те же учётные данные, что используются для перевода (AMI), если перевод через AMI.
+
+6. КАК ЧИТАТЬ ТАБЛИЦУ «ЛИДЫ» В АДМИНКЕ (сводка)
+--------------------------------------------------------------------------------
+- «ТГ-бот» — лид из Telegram; пустой телефон, если пользователь не оставил номер в боте
+  (не путать с голосовым звонком и ANI Asterisk).
+- «голосовой бот» — source=phone; номер из AstDB vikingi_ani + AMI и/или из реплики абонента.
+- Метка «21–8» = нерабочий интервал по полю времени в БД: с 21:00 до 08:00; записи 02:xx
+  и 06:xx попадают сюда до 08:00 — по правилам фильтра это корректно.
+- Полный список правок кода за 2026-04-06: docs/VIKINGI_RECENT_CHANGES_2026-04-06.txt
+
+================================================================================
+КОМАНДЫ НА SERVER7 (каталог проекта: /home/vikingi/VikingiAll)
+================================================================================
+
+# 0) (Опционально) проверить .env: TZ, POSTGRESQL_SESSION_TIMEZONE, ASTERISK_AMI_*
+
+cd /home/vikingi/VikingiAll
+
+# 1) Asterisk: после изменения asterisk/conf/extensions.conf — пересборка образа и перезапуск
+docker compose build asterisk
+docker compose up -d asterisk
+
+# Если конфиг в контейнере уже актуален и нужен только перезагруз диалплана без рестарта:
+docker compose exec asterisk asterisk -rx "dialplan reload"
+
+# 2) Голосовой бот: новый код Python в образе — пересборка и перезапуск
+docker compose build voice-bot
+docker compose up -d voice-bot
+
+# 3) Сервисы, пишущие лиды в PostgreSQL (после правок database/dialog/postgresql_config)
+#    admin-panel для записи лидов не обязателен; перезапуск при изменениях API админки:
+docker compose build admin-panel
+docker compose up -d admin-panel
+
+docker compose build max-bot
+docker compose up -d max-bot
+
+# telegram-bot только если включён профиль telegram:
+docker compose --profile telegram build telegram-bot
+docker compose --profile telegram up -d telegram-bot
+
+# 4) Упрощённо одной строкой после правок кода app + voice + asterisk conf:
+# docker compose build asterisk voice-bot admin-panel max-bot
+# docker compose up -d asterisk voice-bot admin-panel max-bot
+# (+ telegram при необходимости)
+
+================================================================================
+Конец файла
+================================================================================

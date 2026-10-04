@@ -1,0 +1,35 @@
+=== STT benchmark: Whisper medium + large (20260319_104451) ===
+STT_BASE=http://127.0.0.1:8001
+
+--- WHISPER_MODEL_SIZE=medium ---
+engine\twhisper_medium
+hypothesis	ok	empty	halluc	other
+H0_base	9	1	0	0
+H1_prompt	9	1	0	0
+H2_loud8db	9	1	0	0
+H3_trim	7	0	0	3
+H4_loudtrim+prompt	7	0	0	3
+Полная таблица: /tmp/stt_whisper_medium_516675/all.tsv
+--- WHISPER_MODEL_SIZE=large ---
+engine\twhisper_large
+hypothesis	ok	empty	halluc	other
+H0_base	8	1	0	1
+H1_prompt	8	1	0	1
+H2_loud8db	8	1	0	1
+H3_trim	8	0	2	0
+H4_loudtrim+prompt	8	0	2	0
+Полная таблица: /tmp/stt_whisper_large_520482/all.tsv
+=== Сводка по движку и гипотезе (склеено) ===
+engine	hypothesis	ok	empty	halluc	other
+whisper_large	H0_base	8	0	0	1
+whisper_large	H1_prompt	8	0	0	1
+whisper_large	H2_loud8db	8	0	0	1
+whisper_large	H3_trim	8	0	2	0
+whisper_large	H4_loudtrim+prompt	8	0	2	0
+whisper_medium	H0_base	9	0	0	0
+whisper_medium	H1_prompt	9	0	0	0
+whisper_medium	H2_loud8db	9	0	0	0
+whisper_medium	H3_trim	7	0	0	3
+whisper_medium	H4_loudtrim+prompt	7	0	0	3
+
+Объединённый TSV: /home/vikingi/VikingiAll/experiments/stt_whisper_medium_large_20260319_104451.tsv

@@ -1,0 +1,38 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libsndfile1 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY services/voice/requirements.txt /app/requirements_voice.txt
+RUN pip install --no-cache-dir --timeout 120 \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    -r /app/requirements_voice.txt
+
+COPY config.py /app/config.py
+COPY postgresql_config.py /app/postgresql_config.py
+COPY database/ /app/database/
+COPY asterisk_transfer.py /app/asterisk_transfer.py
+COPY gpu_priority_lock.py /app/gpu_priority_lock.py
+COPY dialog/ /app/dialog/
+COPY call_analytics/ /app/call_analytics/
+COPY telegram_bot/__init__.py /app/telegram_bot/__init__.py
+COPY telegram_bot/services/ /app/telegram_bot/services/
+COPY telegram_bot/utils/ /app/telegram_bot/utils/
+COPY telegram_bot_config.py /app/telegram_bot_config.py
+COPY max_bot/__init__.py /app/max_bot/__init__.py
+COPY max_bot/config.py /app/max_bot/config.py
+COPY max_bot/api_client.py /app/max_bot/api_client.py
+COPY max_bot/notify_max_channels.py /app/max_bot/notify_max_channels.py
+COPY max_bot/voice_service_booking_notify.py /app/max_bot/voice_service_booking_notify.py
+COPY russian_first_names_catalog.py /app/russian_first_names_catalog.py
+COPY data/ /app/data/
+COPY services/voice/ /app/services/voice/
+COPY licensing/ /app/licensing/
+COPY license.key /app/license.key
+
+EXPOSE 8003 9092 9093
+
+CMD ["uvicorn", "services.voice.main:app", "--host", "0.0.0.0", "--port", "8003"]

@@ -1,0 +1,12 @@
+{
+  "default": {
+    "start": "08:00",
+    "end": "20:00"
+  },
+  "date_range": {
+    "from": "2025-02-07",
+    "to": "2026-12-21"
+  },
+  "overrides": {},
+  "voice_bot_special_days": {}
+}

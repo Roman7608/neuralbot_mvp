@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Аналитика качества — Vikingi</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <p class="site-block-title">Блок аналитики телефонных разговоров. Компания «Викинги»</p>
+    <p class="site-author">автор: Роман Козенков, февраль 2026</p>
+    <h1>Аналитика качества звонков</h1>
+    <p id="classifierModeAnalytics" style="display:none;font-size:0.9rem;color:#555;margin:0.25rem 0 0.5rem;"></p>
+    <nav>
+      <a href="/">Звонки</a>
+      <a href="/upload" id="navUpload">Загрузка</a>
+      <a href="/leads">Лиды</a>
+      <a href="/analytics" class="nav-active">Аналитика</a>
+      <a href="/body-calls" id="navBodyCalls" style="display:none">Кузовной цех</a>
+      <a href="/voice-transfers" id="navVoiceBot" style="display:none">Переводы бота</a>
+      <a href="/sto" id="navSto" style="display:none">СТО</a>
+      <button type="button" class="nav-logout" id="navLogout">Завершить сеанс</button>
+    </nav>
+  </header>
+  <main>
+    <section class="filters analytics-filters">
+      <div class="filter-row">
+        <div class="filter-field"><label>Отдел:
+          <select id="department">
+            <option value="OP">Отдел Продаж</option>
+            <option value="STO">СТО</option>
+          </select>
+        </label></div>
+        <div class="filter-field"><label>Менеджер:
+          <select id="manager">
+            <option value="">Все</option>
+          </select>
+        </label></div>
+        <div class="filter-field" id="callTypeLabel" style="display:none"><label>Вид:
+          <select id="callType">
+            <option value="">Все</option>
+            <option value="OP_IN">ОП входящие</option>
+            <option value="OP_OUT">ОП исходящие</option>
+          </select>
+        </label></div>
+        <div class="filter-field"><label>Горизонт:
+          <select id="months">
+            <option value="1w">1 неделя</option>
+            <option value="1" selected>месяц</option>
+            <option value="3">3 месяца</option>
+            <option value="6">6 месяцев</option>
+            <option value="12">12 месяцев</option>
+          </select>
+        </label></div>
+        <button type="button" id="applyFilters" class="btn-show">Показать</button>
+      </div>
+      <p id="deptChangeHint" class="analytics-export-note" style="display:none;margin-top:0.35rem;">
+        Отдел изменён — нажмите «Показать», чтобы загрузить отчёт для выбранного отдела.
+      </p>
+      <div class="filter-row" id="opManagerMatrixFilters" style="display:none;flex-wrap:wrap;gap:0.5rem 1rem;margin-top:0.6rem;">
+        <div class="filter-field"><label>Период для таблицы:
+          <input type="date" id="matrixDateFrom"> — <input type="date" id="matrixDateTo">
+        </label></div>
+        <div class="filter-field"><label>Менеджеры ОП:
+          <select id="matrixManagers" multiple size="6" style="min-width:260px;"></select>
+        </label></div>
+      </div>
+      <div class="filter-row" id="stoAnalyticsFilters" style="display:none;flex-wrap:wrap;gap:0.5rem 1rem;margin-top:0.6rem;">
+        <div class="filter-field"><label>Направление:
+          <select id="stoCallDirectionFilter">
+            <option value="">Все (СТО_ТО_вх. и исх.)</option>
+            <option value="STO_IN">СТО_ТО_вход</option>
+            <option value="STO_OUT">СТО_ТО_исход</option>
+          </select>
+        </label></div>
+        <div class="filter-field"><label>Марка / линейка:
+          <select id="stoBrandFilter">
+            <option value="">Все</option>
+            <option value="chery_tenet">Chery / Tenet</option>
+            <option value="nissan">Nissan</option>
+            <option value="other_brand">Прочие марки</option>
+          </select>
+        </label></div>
+        <div class="filter-field"><label>Вид работ:
+          <select id="stoWorkFilter">
+            <option value="">Все</option>
+            <option value="to">ТО</option>
+            <option value="warranty">Гарантия</option>
+            <option value="diagnostics">Диагностика</option>
+            <option value="body_shop">Кузовной цех</option>
+            <option value="quality_check">Проверка качества</option>
+            <option value="other_work">Прочие виды работ</option>
+          </select>
+        </label></div>
+        <div class="filter-field"><label><input type="checkbox" id="stoRubricOnlyFilter"> Только узкая рубрика ТО (чек-лист)</label></div>
+      </div>
+      <p id="stoFiltersNote" class="analytics-export-note" style="display:none;margin-top:0.35rem;">
+        Отдельное поле «модель авто» в базе по звонку не ведётся: используйте марку/линейку (Chery·Tenet, Nissan или прочие). Детализация по моделям возможна позже при расширении разметки.
+      </p>
+    </section>
+
+    <div class="analytics-export-bar" id="exportBar" style="display:none">
+      <span>Сохранить отчёт:</span>
+      <button type="button" class="btn-secondary" id="btnExportCsv">CSV</button>
+      <button type="button" class="btn-secondary" id="btnExportXlsx">Excel (xlsx)</button>
+      <button type="button" class="btn-secondary" id="btnPrint">Печать (одна страница)</button>
+      <p class="analytics-export-note">Файл скачивается в папку «Загрузки» <strong>вашего компьютера</strong> (браузер), а не на server7. На сервер копирование не выполняется.</p>
+    </div>
+
+    <div id="printableReport">
+      <div id="reportHeader" class="analytics-report-header" style="display:none">
+        <p id="reportMeta" class="report-meta"></p>
+      </div>
+
+      <section id="statsSection" class="analytics-stats" style="display:none">
+        <h2>Сводка</h2>
+        <div class="stats-grid">
+          <div class="stat-card"><span class="stat-value" id="statAvg">—</span><span class="stat-label">Средний балл (за звонок)</span></div>
+          <div class="stat-card"><span class="stat-value" id="statCalls">—</span><span class="stat-label">Всего звонков</span></div>
+          <div class="stat-card"><span class="stat-value" id="statMin">—</span><span class="stat-label">Минимум (по звонкам)</span></div>
+          <div class="stat-card"><span class="stat-value" id="statMax">—</span><span class="stat-label">Максимум (по звонкам)</span></div>
+        </div>
+      </section>
+
+      <section id="stoBookingSection" class="analytics-criteria-table table-wrap" style="display:none">
+        <h2>СТО: марки и виды работ</h2>
+        <p class="analytics-export-note" style="margin-bottom:0.5rem">
+          Для звонков <strong>СТО_ТО_вход/исход</strong> (широкая классификация): объёмы по маркам и видам работ; «запись» — признак темы записи; «визит согласован» — эвристика по тексту.
+        </p>
+        <div class="stats-grid" style="margin-bottom:0.75rem">
+          <div class="stat-card"><span class="stat-value" id="stoTotalCalls">—</span><span class="stat-label">СТО звонков</span></div>
+          <div class="stat-card"><span class="stat-value" id="stoTotalBookings">—</span><span class="stat-label">Тема записи</span></div>
+          <div class="stat-card"><span class="stat-value" id="stoTotalAppointments">—</span><span class="stat-label">Визит согласован</span></div>
+        </div>
+        <h3 style="margin-top:0.6rem;">По марке</h3>
+        <table>
+          <thead>
+            <tr><th>Марка</th><th>Звонков</th><th>Тема записи</th><th>Визит согласован</th></tr>
+          </thead>
+          <tbody id="stoBrandBody"></tbody>
+        </table>
+        <h3 style="margin-top:0.8rem;">По виду работ</h3>
+        <table>
+          <thead>
+            <tr><th>Вид работ</th><th>Звонков</th><th>Тема записи</th><th>Визит согласован</th></tr>
+          </thead>
+          <tbody id="stoWorkBody"></tbody>
+        </table>
+      </section>
+
+      <section id="criteriaSection" class="analytics-criteria-table table-wrap" style="display:none">
+        <h2>Средние оценки по критериям за период</h2>
+        <p class="analytics-export-note" style="margin-bottom:0.5rem">Только звонки <strong>ОП вх.</strong> и <strong>ОП исх.</strong> · фильтры: отдел продаж, менеджер, вид звонка, горизонт.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Критерий</th>
+              <th>Среднее</th>
+              <th>Мин.</th>
+              <th>Макс.</th>
+              <th>Звонков с оценкой</th>
+            </tr>
+          </thead>
+          <tbody id="criteriaTableBody"></tbody>
+        </table>
+      </section>
+      <section id="opManagerMatrixSection" class="analytics-criteria-table table-wrap" style="display:none">
+        <h2>ОП: таблица по менеджерам</h2>
+        <p class="analytics-export-note" style="margin-bottom:0.5rem">
+          Период задаётся полями «Период для таблицы», менеджеры — из справочника ОП.
+          Значения в колонках — средние оценки по критериям за звонок (0–1), «Итого» — средняя сумма выполненных пунктов (0–14).
+        </p>
+        <table>
+          <thead id="opManagerMatrixHead"></thead>
+          <tbody id="opManagerMatrixBody"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <section id="callsListSection" class="analytics-calls-list" style="display:none">
+      <h2>Звонки за период</h2>
+      <ul id="callsList"></ul>
+    </section>
+
+    <p id="loading" style="display:none">Загрузка данных…</p>
+    <p id="noData" style="display:none; color:#888;">Нет данных за выбранный период.</p>
+    <p id="error" class="error"></p>
+  </main>
+
+  <script>
+  (function() {
+    function parseAdminRoleId() {
+      const v = window.ADMIN_ROLE_ID;
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      const n = parseInt(String(v), 10);
+      return Number.isFinite(n) ? n : null;
+    }
+    const roleId = parseAdminRoleId();
+    if (roleId == null) {
+      const er = document.getElementById('error');
+      if (er) er.textContent = 'Не удалось определить роль. Откройте «Аналитика» из меню после входа (не /static/analytics.html).';
+    }
+    if (roleId === 8) {
+      const nv = document.getElementById('navVoiceBot');
+      if (nv) nv.style.display = 'inline';
+    }
+    if (roleId != null && roleId <= 3) document.getElementById('navUpload').style.display = 'none';
+    if (roleId === 2 || roleId >= 5) document.getElementById('navSto').style.display = 'inline';
+    if (roleId === 5 || roleId === 6 || roleId === 8) {
+      const nb = document.getElementById('navBodyCalls');
+      if (nb) nb.style.display = 'inline';
+    }
+    document.getElementById('navLogout').onclick = async function() {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+      window.location.href = '/login';
+    };
+
+    const deptSelect = document.getElementById('department');
+    if (roleId === 4) deptSelect.innerHTML = '<option value="OP">Отдел Продаж</option>';
+    else if (roleId === 5) deptSelect.innerHTML = '<option value="STO">СТО</option>';
+    else if (roleId == null) {
+      deptSelect.innerHTML = '<option value="">—</option>';
+      deptSelect.disabled = true;
+      const ap = document.getElementById('applyFilters');
+      if (ap) ap.disabled = true;
+    }
+    function toggleCallTypeFilter() {
+      const ctLabel = document.getElementById('callTypeLabel');
+      ctLabel.style.display = (deptSelect.value === 'OP') ? 'inline-flex' : 'none';
+      if (deptSelect.value !== 'OP') document.getElementById('callType').value = '';
+    }
+
+    const mgrSelect = document.getElementById('manager');
+    const monthsSelect = document.getElementById('months');
+    const matrixDateFrom = document.getElementById('matrixDateFrom');
+    const matrixDateTo = document.getElementById('matrixDateTo');
+    const matrixManagers = document.getElementById('matrixManagers');
+    /** @type {Record<string, string>} */
+    let criteriaMap = {};
+    /** @type {null | { call_periods?: Record<string, { date_from: string, date_to: string }> }} */
+    var serverCfg = null;
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    /** Горизонт: 1 неделя или N месяцев */
+    function horizonApiParams() {
+      const v = monthsSelect.value;
+      if (v === '1w') return { weeks: '1' };
+      return { months: v };
+    }
+
+    function getSelectedDepartment() {
+      return String((deptSelect && deptSelect.value) || '').trim().toUpperCase();
+    }
+
+    function appendStoAnalyticsParams(params) {
+      const d = document.getElementById('stoCallDirectionFilter');
+      const b = document.getElementById('stoBrandFilter');
+      const w = document.getElementById('stoWorkFilter');
+      const r = document.getElementById('stoRubricOnlyFilter');
+      if (d && d.value) params.set('call_type', d.value);
+      if (b && b.value) params.set('sto_service_brand', b.value);
+      if (w && w.value) params.set('sto_work_type', w.value);
+      if (r && r.checked) params.set('sto_to_rubric_only', 'true');
+    }
+
+    function formatStoFilterSummary() {
+      const parts = [];
+      const d = document.getElementById('stoCallDirectionFilter');
+      if (d && d.value === 'STO_IN') parts.push('направление: СТО_ТО_вх.');
+      else if (d && d.value === 'STO_OUT') parts.push('направление: СТО_ТО_исх.');
+      const b = document.getElementById('stoBrandFilter');
+      if (b && b.value) {
+        const map = { chery_tenet: 'Chery / Tenet', nissan: 'Nissan', other_brand: 'прочие марки' };
+        parts.push('марка: ' + (map[b.value] || b.value));
+      }
+      const w = document.getElementById('stoWorkFilter');
+      if (w && w.value) {
+        const map2 = { to: 'ТО', warranty: 'гарантия', diagnostics: 'диагностика', body_shop: 'кузовной цех', quality_check: 'проверка качества', other_work: 'прочие виды работ' };
+        parts.push('виды работ: ' + (map2[w.value] || w.value));
+      }
+      const r = document.getElementById('stoRubricOnlyFilter');
+      if (r && r.checked) parts.push('только узкая рубрика ТО');
+      return parts.length ? ' · ' + parts.join(' · ') : '';
+    }
+
+    function toggleStoAnalyticsFilters() {
+      const show = getSelectedDepartment() === 'STO';
+      const row = document.getElementById('stoAnalyticsFilters');
+      const note = document.getElementById('stoFiltersNote');
+      if (row) row.style.display = show ? 'flex' : 'none';
+      if (note) note.style.display = show ? 'block' : 'none';
+    }
+    function canSeeOpManagerMatrix() {
+      return roleId === 4 || roleId === 6 || roleId === 8;
+    }
+    function toggleOpManagerMatrixFilters() {
+      const show = canSeeOpManagerMatrix() && getSelectedDepartment() === 'OP';
+      const row = document.getElementById('opManagerMatrixFilters');
+      if (row) row.style.display = show ? 'flex' : 'none';
+    }
+    // Без этого при первой отрисовке нет события change; не ждём admin_config.
+    toggleStoAnalyticsFilters();
+
+    function clearAnalyticsResults() {
+      document.getElementById('reportHeader').style.display = 'none';
+      document.getElementById('statsSection').style.display = 'none';
+      document.getElementById('criteriaSection').style.display = 'none';
+      document.getElementById('opManagerMatrixSection').style.display = 'none';
+      document.getElementById('stoBookingSection').style.display = 'none';
+      document.getElementById('exportBar').style.display = 'none';
+      document.getElementById('callsListSection').style.display = 'none';
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('noData').style.display = 'none';
+      document.getElementById('error').textContent = '';
+      const hint = document.getElementById('deptChangeHint');
+      if (hint) hint.style.display = 'block';
+    }
+
+    deptSelect.addEventListener('change', function() {
+      toggleCallTypeFilter();
+      toggleStoAnalyticsFilters();
+      toggleOpManagerMatrixFilters();
+      clearAnalyticsResults();
+      loadCriteria();
+      loadManagers();
+    });
+
+    function loadCriteria() {
+      const dept = getSelectedDepartment();
+      if (dept !== 'OP') {
+        criteriaMap = {};
+        return;
+      }
+      fetch('/api/analytics/criteria?department=OP')
+        .then(r => r.json())
+        .then(data => {
+          criteriaMap = data.criteria || {};
+        });
+    }
+
+    function loadManagers() {
+      const dept = getSelectedDepartment();
+      fetch('/api/analytics/managers?department=' + dept, { cache: 'no-store' })
+        .then(r => r.json())
+        .then(rows => {
+          mgrSelect.innerHTML = '<option value="">Все</option>';
+          rows.forEach(r => {
+            const label = r.display || r.manager_name || ('№' + (r.internal_number || ''));
+            const val = r.manager_name || '';
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = label;
+            mgrSelect.appendChild(opt);
+          });
+          if (dept === 'OP' && matrixManagers) {
+            const rosterLabels = rows
+              .map(function(r) { return String(r.display || r.manager_name || '').trim(); })
+              .filter(Boolean);
+            const prevSelected = new Set(
+              Array.from(matrixManagers.selectedOptions || []).map(function(o) { return o.value; })
+            );
+            if (prevSelected.delete('Андрей (неясно, Калаев или Щеголев)')) {
+              prevSelected.add('Андрей (без фамилии)');
+            }
+            const rosterExpanded = prevSelected.size > 0
+              && rosterLabels.length > prevSelected.size
+              && prevSelected.size === rosterLabels.length - 1;
+            matrixManagers.innerHTML = '';
+            rows.forEach(r => {
+              const label = r.display || r.manager_name || '';
+              if (!label) return;
+              const opt = document.createElement('option');
+              opt.value = label;
+              opt.textContent = label;
+              opt.selected = !prevSelected.size
+                || prevSelected.has(label)
+                || rosterExpanded;
+              matrixManagers.appendChild(opt);
+            });
+          } else if (matrixManagers) {
+            matrixManagers.innerHTML = '';
+          }
+        });
+    }
+
+    function selectedMatrixManagers() {
+      if (!matrixManagers) return [];
+      return Array.from(matrixManagers.selectedOptions || [])
+        .map(function(o) { return String(o.value || '').trim(); })
+        .filter(Boolean);
+    }
+
+    function renderOpManagerMatrix(data) {
+      const section = document.getElementById('opManagerMatrixSection');
+      const head = document.getElementById('opManagerMatrixHead');
+      const body = document.getElementById('opManagerMatrixBody');
+      if (!section || !head || !body) return;
+      const labels = (data && data.criteria_labels) || {};
+      const keys = Object.keys(labels);
+      head.innerHTML =
+        '<tr><th>Менеджер</th><th>Звонков</th>'
+        + keys.map(function(k) { return '<th>' + escapeHtml(String(labels[k] || k)) + '</th>'; }).join('')
+        + '<th>Итого</th></tr>';
+      const rows = (data && data.rows) || [];
+      body.innerHTML = rows.length ? rows.map(function(r) {
+        const criteria = r.criteria || {};
+        const cells = keys.map(function(k) {
+          const v = criteria[k];
+          return '<td class="num">' + (v == null ? '—' : Number(v).toFixed(2)) + '</td>';
+        }).join('');
+        return '<tr>'
+          + '<td>' + escapeHtml(String(r.manager_name || '—')) + '</td>'
+          + '<td class="num">' + String(r.call_count || 0) + '</td>'
+          + cells
+          + '<td class="num">' + (r.total_avg == null ? '—' : Number(r.total_avg).toFixed(2)) + '</td>'
+          + '</tr>';
+      }).join('') : '<tr><td colspan="99">Нет данных</td></tr>';
+      section.style.display = 'block';
+    }
+
+    function loadOpManagerMatrix() {
+      if (!canSeeOpManagerMatrix() || getSelectedDepartment() !== 'OP') return Promise.resolve();
+      const section = document.getElementById('opManagerMatrixSection');
+      if (!matrixDateFrom || !matrixDateTo) {
+        if (section) section.style.display = 'none';
+        return Promise.resolve();
+      }
+      const df = (matrixDateFrom.value || '').trim();
+      const dt = (matrixDateTo.value || '').trim();
+      if (!df || !dt) {
+        if (section) section.style.display = 'none';
+        return Promise.resolve();
+      }
+      const params = new URLSearchParams();
+      params.set('date_from', df);
+      params.set('date_to', dt);
+      const ct = document.getElementById('callType');
+      if (ct && ct.value) params.set('call_type', ct.value);
+      const matrixSelected = selectedMatrixManagers();
+      const matrixAll = matrixManagers
+        ? Array.from(matrixManagers.options || []).map(function(o) { return String(o.value || '').trim(); }).filter(Boolean)
+        : [];
+      if (matrixSelected.length > 0 && matrixSelected.length < matrixAll.length) {
+        matrixSelected.forEach(function(m) { params.append('manager_names', m); });
+      }
+      return fetch('/api/analytics/op-manager-matrix?' + params, { cache: 'no-store' })
+        .then(function(r) {
+          return r.json().then(function(d) {
+            if (!r.ok) throw new Error((d && d.detail) ? d.detail : 'Ошибка загрузки таблицы менеджеров');
+            return d;
+          });
+        })
+        .then(renderOpManagerMatrix)
+        .catch(function(e) {
+          const er = document.getElementById('error');
+          if (er) er.textContent = 'Ошибка: ' + e.message;
+        });
+    }
+
+    function renderCriteriaTable(period) {
+      const tbody = document.getElementById('criteriaTableBody');
+      tbody.innerHTML = '';
+      const crit = period.criteria || {};
+      const overall = period.overall;
+
+      const rowOverall = document.createElement('tr');
+      rowOverall.innerHTML =
+        '<td><strong>Средняя оценка за звонок</strong></td>' +
+        '<td class="num">' + (overall ? overall.avg.toFixed(2) : '—') + '</td>' +
+        '<td class="num">' + (overall ? overall.min.toFixed(2) : '—') + '</td>' +
+        '<td class="num">' + (overall ? overall.max.toFixed(2) : '—') + '</td>' +
+        '<td class="num">' + (overall ? overall.n : '—') + '</td>';
+      tbody.appendChild(rowOverall);
+
+      for (const [key, label] of Object.entries(criteriaMap)) {
+        const st = crit[key];
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + escapeHtml(label) + '</td>' +
+          '<td class="num">' + (st ? st.avg.toFixed(2) : '—') + '</td>' +
+          '<td class="num">' + (st ? st.min.toFixed(2) : '—') + '</td>' +
+          '<td class="num">' + (st ? st.max.toFixed(2) : '—') + '</td>' +
+          '<td class="num">' + (st ? st.n : '—') + '</td>';
+        tbody.appendChild(tr);
+      }
+    }
+
+    function loadAnalytics() {
+      const hint = document.getElementById('deptChangeHint');
+      if (hint) hint.style.display = 'none';
+      const dept = getSelectedDepartment();
+      const managerName = mgrSelect.value;
+      const callTypeSelect = document.getElementById('callType');
+      const callTypeVal = (dept === 'OP' && callTypeSelect) ? callTypeSelect.value : '';
+
+      const params = new URLSearchParams({ department: dept });
+      const hp = horizonApiParams();
+      if (hp.weeks) params.set('weeks', hp.weeks);
+      else params.set('months', hp.months || '1');
+      if (managerName) params.set('manager_name', managerName);
+      if (callTypeVal) params.set('call_type', callTypeVal);
+      if (dept === 'STO') appendStoAnalyticsParams(params);
+
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('noData').style.display = 'none';
+      document.getElementById('error').textContent = '';
+      document.getElementById('statsSection').style.display = 'none';
+      document.getElementById('stoBookingSection').style.display = 'none';
+      document.getElementById('criteriaSection').style.display = 'none';
+      document.getElementById('exportBar').style.display = 'none';
+      document.getElementById('reportHeader').style.display = 'none';
+
+      if (dept === 'STO') {
+        fetch('/api/analytics/sto-booking?' + params)
+          .then(function(r) {
+            if (!r.ok) throw new Error('sto-booking ' + r.status);
+            return r.json();
+          })
+          .then(function(stoBooking) {
+            document.getElementById('loading').style.display = 'none';
+            criteriaMap = {};
+            loadCallsList(dept, managerName, '', monthsSelect.value);
+            const stoTc = stoBooking && stoBooking.totals ? (stoBooking.totals.calls || 0) : 0;
+            if (!stoTc) {
+              document.getElementById('noData').style.display = 'block';
+              return;
+            }
+            const mgrLabel = (managerName || '').trim() || 'весь отдел';
+            const horizonLabel = monthsSelect.value === '1w' ? '1 неделя' : monthsSelect.options[monthsSelect.selectedIndex].textContent;
+            const df = stoBooking.date_from || '';
+            const dt = stoBooking.date_to || '';
+            document.getElementById('reportMeta').textContent =
+              'Отдел: СТО · Менеджер: ' + mgrLabel +
+              ' · Сводка: марки и виды работ · Горизонт: ' + horizonLabel +
+              ' · Даты в отчёте: ' + df + ' — ' + dt + formatStoFilterSummary();
+            document.getElementById('reportHeader').style.display = 'block';
+            renderStoBooking(stoBooking);
+            document.getElementById('stoBookingSection').style.display = 'block';
+          })
+          .catch(function(e) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').textContent = 'Ошибка: ' + e.message;
+          });
+        return;
+      }
+
+      Promise.all([
+        fetch('/api/analytics/period?' + params).then(function(r) { return r.json(); }),
+        fetch('/api/analytics/criteria?department=OP').then(function(r) { return r.json(); }),
+      ])
+        .then(function(_ref) {
+          var period = _ref[0];
+          var critData = _ref[1];
+          document.getElementById('loading').style.display = 'none';
+          criteriaMap = critData.criteria || {};
+          loadCallsList(dept, managerName, callTypeVal, monthsSelect.value);
+
+          var n = period.call_count || 0;
+          if (!n) {
+            document.getElementById('noData').style.display = 'block';
+            return;
+          }
+
+          var overall = period.overall;
+          if (overall) {
+            document.getElementById('statAvg').textContent = overall.avg.toFixed(2);
+            document.getElementById('statMin').textContent = overall.min.toFixed(2);
+            document.getElementById('statMax').textContent = overall.max.toFixed(2);
+          } else {
+            document.getElementById('statAvg').textContent = '—';
+            document.getElementById('statMin').textContent = '—';
+            document.getElementById('statMax').textContent = '—';
+          }
+          document.getElementById('statCalls').textContent = String(n);
+          document.getElementById('statsSection').style.display = 'block';
+
+          var mgrLabel = (managerName || '').trim() || 'весь отдел';
+          var ctLabel = callTypeVal
+            ? (callTypeVal === 'OP_IN' ? 'ОП входящие' : (callTypeVal === 'OP_OUT' ? 'ОП исходящие' : (callTypeVal === 'OTHER' ? 'Прочие' : callTypeVal)))
+            : 'ОП вх. и ОП исх.';
+          var horizonLabel = monthsSelect.value === '1w' ? '1 неделя' : monthsSelect.options[monthsSelect.selectedIndex].textContent;
+          var df = period.date_from || '';
+          var dt = period.date_to || '';
+          document.getElementById('reportMeta').textContent =
+            'Отдел: Отдел продаж · Менеджер: ' + mgrLabel + ' · Вид: ' + ctLabel +
+            ' · Горизонт: ' + horizonLabel + ' · Даты в отчёте: ' + df + ' — ' + dt;
+          document.getElementById('reportHeader').style.display = 'block';
+
+          renderCriteriaTable(period);
+          document.getElementById('criteriaSection').style.display = 'block';
+          document.getElementById('exportBar').style.display = 'flex';
+          return loadOpManagerMatrix();
+        })
+        .catch(function(e) {
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('error').textContent = 'Ошибка: ' + e.message;
+        });
+    }
+
+    function stoBrandLabel(key) {
+      if (key === 'chery_tenet') return 'Chery/Tenet';
+      if (key === 'nissan') return 'Nissan';
+      return 'Прочие';
+    }
+
+    function stoWorkLabel(key) {
+      if (key === 'to') return 'ТО';
+      if (key === 'warranty') return 'Гарантия';
+      if (key === 'diagnostics') return 'Диагностика';
+      if (key === 'body_shop') return 'Кузовной цех';
+      if (key === 'quality_check') return 'Проверка качества';
+      return 'Прочие';
+    }
+
+    function renderStoBooking(data) {
+      const totals = data && data.totals ? data.totals : { calls: 0, bookings: 0, appointments: 0 };
+      document.getElementById('stoTotalCalls').textContent = String(totals.calls || 0);
+      document.getElementById('stoTotalBookings').textContent = String(totals.bookings || 0);
+      const elAp = document.getElementById('stoTotalAppointments');
+      if (elAp) elAp.textContent = String(totals.appointments || 0);
+
+      const brandBody = document.getElementById('stoBrandBody');
+      const brands = (data && data.by_brand) || [];
+      brandBody.innerHTML = brands.length
+        ? brands.map(r =>
+            '<tr><td>' + escapeHtml(stoBrandLabel(r.key || 'other_brand')) + '</td>' +
+            '<td class="num">' + String(r.calls || 0) + '</td>' +
+            '<td class="num">' + String(r.bookings || 0) + '</td>' +
+            '<td class="num">' + String(r.appointments || 0) + '</td></tr>'
+          ).join('')
+        : '<tr><td colspan="4">Нет данных</td></tr>';
+
+      const workBody = document.getElementById('stoWorkBody');
+      const works = (data && data.by_work_type) || [];
+      workBody.innerHTML = works.length
+        ? works.map(r =>
+            '<tr><td>' + escapeHtml(stoWorkLabel(r.key || 'other_work')) + '</td>' +
+            '<td class="num">' + String(r.calls || 0) + '</td>' +
+            '<td class="num">' + String(r.bookings || 0) + '</td>' +
+            '<td class="num">' + String(r.appointments || 0) + '</td></tr>'
+          ).join('')
+        : '<tr><td colspan="4">Нет данных</td></tr>';
+    }
+
+    function buildExportUrl(exportFmt) {
+      const dept = getSelectedDepartment();
+      const params = new URLSearchParams({ department: dept, export_fmt: exportFmt });
+      const hp = horizonApiParams();
+      if (hp.weeks) params.set('weeks', hp.weeks);
+      else params.set('months', hp.months || '1');
+      if (mgrSelect.value) params.set('manager_name', mgrSelect.value);
+      const callTypeSelect = document.getElementById('callType');
+      const callTypeVal = (dept === 'OP' && callTypeSelect) ? callTypeSelect.value : '';
+      if (callTypeVal) params.set('call_type', callTypeVal);
+      return '/api/analytics/export?' + params;
+    }
+
+    document.getElementById('btnExportCsv').onclick = function() {
+      window.location.href = buildExportUrl('csv');
+    };
+    document.getElementById('btnExportXlsx').onclick = function() {
+      window.location.href = buildExportUrl('xlsx');
+    };
+    document.getElementById('btnPrint').onclick = function() {
+      window.print();
+    };
+
+    function loadCallsList(dept, managerName, callTypeVal, horizonValue) {
+      let dateFrom;
+      let dateTo;
+      if (serverCfg && serverCfg.call_periods && serverCfg.call_periods[horizonValue]) {
+        const p = serverCfg.call_periods[horizonValue];
+        dateFrom = p.date_from;
+        dateTo = p.date_to;
+      } else {
+        const dTo = new Date();
+        const dFrom = new Date();
+        if (horizonValue === '1w') {
+          dFrom.setDate(dFrom.getDate() - 7);
+        } else {
+          dFrom.setMonth(dFrom.getMonth() - parseInt(horizonValue, 10));
+        }
+        dateFrom = dFrom.toISOString().slice(0, 10);
+        dateTo = dTo.toISOString().slice(0, 10);
+      }
+      const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, department: dept, limit: '500', order: 'asc' });
+      if (managerName) params.set('manager_name', managerName);
+      if (dept === 'STO') appendStoAnalyticsParams(params);
+      else if (callTypeVal) params.set('call_type', callTypeVal);
+      fetch('/api/calls?' + params, { cache: 'no-store' })
+        .then(r => r.json())
+        .then(rows => {
+          const ul = document.getElementById('callsList');
+          const section = document.getElementById('callsListSection');
+          if (!rows || !rows.length) {
+            ul.innerHTML = '<li class="no-calls">Нет звонков за период</li>';
+            section.style.display = 'block';
+            return;
+          }
+          ul.innerHTML = rows.map(r => {
+            const dt = r.call_date || '-';
+            const tm = r.call_time ? String(r.call_time).slice(0, 8) : '-';
+            const mn = r.manager_name ? ' ' + r.manager_name : '';
+            const sc = r.overall_score != null ? ' — ' + Number(r.overall_score).toFixed(1) : '';
+            return '<li><a href="/call/' + r.id + '">' + dt + ' ' + tm + ' №' + r.internal_number + mn + sc + '</a></li>';
+          }).join('');
+          section.style.display = 'block';
+        })
+        .catch(() => {
+          document.getElementById('callsList').innerHTML = '<li class="no-calls">Ошибка загрузки</li>';
+          document.getElementById('callsListSection').style.display = 'block';
+        });
+    }
+
+    document.getElementById('applyFilters').onclick = loadAnalytics;
+
+    fetch('/api/admin_config', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (cfg) {
+        serverCfg = cfg;
+        const el = document.getElementById('classifierModeAnalytics');
+        if (el && cfg.transcript_classifier) {
+          el.style.display = 'block';
+          el.textContent = cfg.transcript_classifier === 'legacy'
+            ? 'Классификация по транскрипту: legacy (запасной монолит).'
+            : 'Классификация по транскрипту: v2 (главный движок).';
+        }
+      })
+      .catch(function () {})
+      .then(function () {
+        const today = (serverCfg && serverCfg.today) ? serverCfg.today : new Date().toISOString().slice(0, 10);
+        const monthAgoDate = new Date(today);
+        monthAgoDate.setMonth(monthAgoDate.getMonth() - 1);
+        const monthAgo = monthAgoDate.toISOString().slice(0, 10);
+        if (matrixDateFrom && !matrixDateFrom.value) matrixDateFrom.value = monthAgo;
+        if (matrixDateTo && !matrixDateTo.value) matrixDateTo.value = today;
+        loadCriteria();
+        loadManagers();
+        toggleCallTypeFilter();
+        toggleStoAnalyticsFilters();
+        toggleOpManagerMatrixFilters();
+      });
+  })();
+  </script>
+</body>
+</html>
