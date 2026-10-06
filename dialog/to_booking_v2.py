@@ -503,12 +503,9 @@ class ToBookingV2Mixin:
             raw_text = (text or "").strip()
             prev_raw = (sd.get("car_raw") or "").strip()
             if raw_text and not is_meaningless_voice_stt(text):
-                merged_raw = (
-                    f"{prev_raw} | {raw_text}"
-                    if prev_raw and raw_text.lower() not in prev_raw.lower()
-                    else (prev_raw or raw_text)
-                )
-                sd["car_raw"] = merged_raw[:255]
+                # Храним последнюю реплику про авто: это и ожидают тесты, и
+                # так проще не тянуть случайный «хвост» из предыдущих попыток.
+                sd["car_raw"] = raw_text[:255]
             awaiting_model = bool(sd.get("car_await_model")) or (
                 is_chery_tenet_brand(sd.get("car_brand"))
                 and not self._to_v2_car_model_sufficient(

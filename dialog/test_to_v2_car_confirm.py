@@ -75,7 +75,7 @@ class ToV2CarConfirmTest(unittest.IsolatedAsyncioTestCase):
             "Чели тига 8ProMaxс",
         ):
             with self.subTest(phrase=phrase):
-                expected = ("Chery", "ТИГГО 8 ПРО МАКС") if "8ProMax" in phrase else ("Tenet", "T7")
+                expected = ("Chery", "TIGGO 8 PRO MAX") if "8ProMax" in phrase else ("Tenet", "T7")
                 self.assertEqual(extractor.extract_car_info(phrase), expected)
 
     def test_jetour_t1_stt_variants(self) -> None:

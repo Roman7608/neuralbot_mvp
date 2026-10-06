@@ -140,7 +140,7 @@ class StoToPriceInquiryTest(unittest.TestCase):
         self.assertIsNotNone(info)
         brand, model = info
         self.assertEqual(brand, "Chery")
-        self.assertEqual(model, "ТИГГО 7")
+        self.assertEqual(model, "TIGGO 7")
 
     def test_price_transfer_confirm_stt(self) -> None:
         self.assertTrue(is_price_transfer_confirm_stt("да."))

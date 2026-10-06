@@ -388,6 +388,61 @@ class CarBrandExtractor:
         logger.info("CarBrandExtractor инициализирован")
 
     @staticmethod
+    def _canonicalize_model_latin(model: Optional[str]) -> Optional[str]:
+        """
+        Канонизирует модель к латинице.
+
+        Требование проекта: нормализованная марка/модель хранится и передается
+        только латиницей. Здесь переводим частые кириллические формы и
+        STT-варианты в единый латинский canonical.
+        """
+        if not model:
+            return None
+        m = str(model).strip()
+        if not m:
+            return None
+        up = m.upper()
+        # Короткие линейки Tenet/Chery.
+        up = re.sub(r"\bТ([4789])Л\b", r"T\1L", up)
+        up = re.sub(r"\bТ([4789])\b", r"T\1", up)
+
+        word_map = {
+            "ТИГГО": "TIGGO",
+            "АРРИЗО": "ARRIZO",
+            "ПРО": "PRO",
+            "МАКС": "MAX",
+            "ПЛЮС": "PLUS",
+            "Л": "L",
+            "ЭЛЬ": "L",
+            "ОНДО": "ON-DO",
+            "ОН-ДО": "ON-DO",
+            "МИДО": "MI-DO",
+            "МИ-ДО": "MI-DO",
+            "ТИГУАН": "TIGUAN",
+            "ТИПУАН": "TIGUAN",
+            "ПАТФАЙНДЕР": "PATHFINDER",
+            "КАШКАЙ": "QASHQAI",
+            "КАШКАИ": "QASHQAI",
+            "ИКСТРЕЙЛ": "X-TRAIL",
+            "ХТРЕЙЛ": "X-TRAIL",
+            "ТЕРРАНО": "TERRANO",
+            "МУРАНО": "MURANO",
+            "ПАТРУЛЬ": "PATROL",
+            "АЛМЕРА": "ALMERA",
+            "СЕНТРА": "SENTRA",
+            "НОУТ": "NOTE",
+            "ДЖУК": "JUKE",
+            "ТИИДА": "TIIDA",
+        }
+        for src, dst in word_map.items():
+            up = re.sub(rf"\b{re.escape(src)}\b", dst, up)
+
+        up = re.sub(r"\bON\s+DO\b", "ON-DO", up)
+        up = re.sub(r"\bMI\s+DO\b", "MI-DO", up)
+        up = re.sub(r"\s+", " ", up).strip()
+        return up or None
+
+    @staticmethod
     def _normalize_stt_chery_tiggo_shards(text: str) -> str:
         """STT Chery/Tenet/Tiggo: полный нормализатор + голосовые дополнения."""
         from dialog.chery_tenet_stt_normalize import normalize_chery_tenet_car_stt
@@ -700,6 +755,7 @@ class CarBrandExtractor:
                     model = "ON-DO"
                 elif datsun_model in ("MIDO", "МИДО"):
                     model = "MI-DO"
+            model = self._canonicalize_model_latin(model)
             return (brand, model)
         return None
 

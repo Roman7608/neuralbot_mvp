@@ -16,12 +16,12 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
 
     def test_voice_extras(self) -> None:
         for raw, need_brand, need_model_part in (
-            ("Сери иг7 Промакс, полный привод.", "Chery", "ПРО МАКС"),
-            ("Шери иг 4ро.", "Chery", "4 ПРО"),
-            ("Шери иг7ро.", "Chery", "7 ПРО"),
-            ("Шери иг8ро.", "Chery", "8 ПРО"),
-            ("Шери иг9ро.", "Chery", "9 ПРО"),
-            ("Чери Тигр 7 Промарс, полный привод.", "Chery", "ПРО МАКС"),
+            ("Сери иг7 Промакс, полный привод.", "Chery", "PRO MAX"),
+            ("Шери иг 4ро.", "Chery", "4 PRO"),
+            ("Шери иг7ро.", "Chery", "7 PRO"),
+            ("Шери иг8ро.", "Chery", "8 PRO"),
+            ("Шери иг9ро.", "Chery", "9 PRO"),
+            ("Чери Тигр 7 Промарс, полный привод.", "Chery", "PRO MAX"),
             ("Чери-тикслим", "Chery", "7"),
             ("Черитик гасим.", "Chery", "7"),
             ("чери тиг 7", "Chery", "7"),
@@ -50,13 +50,13 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
             ("Chery g4", "Chery", "4"),
             ("Cрри Tгo 7", "Chery", "7"),
             ("CheriTga 7PrMax", "Chery", "7"),
-            ("Черри, иgа 7 Пr Макс.", "Chery", "ПРО МАКС"),
+            ("Черри, иgа 7 Пr Макс.", "Chery", "PRO MAX"),
             ("CherTg 4 New", "Chery", "4"),
             ("Chr Te7PMак", "Chery", "7"),
-            ("Чирокс? ильтромакс", "Chery", "ПРО МАКС"),
-            ("Чери чига 7л", "Chery", "7 Л"),
-            ("Чери эээ 7 л", "Chery", "7 Л"),
-            ("ЧереЧга", "Chery", "ТИГГО"),
+            ("Чирокс? ильтромакс", "Chery", "PRO MAX"),
+            ("Чери чига 7л", "Chery", "7 L"),
+            ("Чери эээ 7 л", "Chery", "7 L"),
+            ("ЧереЧга", "Chery", "TIGGO"),
             ("чере", "Chery", None),
         ):
             info = self._extract(raw)
@@ -121,7 +121,7 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
         ):
             with self.subTest(raw=raw):
                 info = self._extract(raw)
-                self.assertEqual(info, ("Chery", "ТИГГО 7 Л"))
+                self.assertEqual(info, ("Chery", "TIGGO 7 L"))
 
     def test_cheretiga_7promarket_maps_to_tiggo_7_pro(self) -> None:
         for raw in ("Черетиgа 7Proмаaрkеt", "черетига 7promarket"):
@@ -130,7 +130,7 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
                 self.assertIsNotNone(info, raw)
                 brand, model = info
                 self.assertEqual(brand, "Chery", raw)
-                self.assertEqual(model, "ТИГГО 7 ПРО", raw)
+                self.assertEqual(model, "TIGGO 7 PRO", raw)
 
     def test_eri_iga_kompromat_variants_map_to_tiggo_7_pro_max(self) -> None:
         for raw in ("ери ига компромат", "черевзигасонпромат"):
@@ -139,7 +139,7 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
                 self.assertIsNotNone(info, raw)
                 brand, model = info
                 self.assertEqual(brand, "Chery", raw)
-                self.assertEqual(model, "ТИГГО 7 ПРО МАКС", raw)
+                self.assertEqual(model, "TIGGO 7 PRO MAX", raw)
 
     def test_analytics_golden_phrases(self) -> None:
         cases = (
@@ -161,8 +161,8 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
             ("CherTg 4 New", "Chery", "4"),
             ("срри тго 7", "Chery", "7"),
             ("Chr Te7PMак", "Chery", "7"),
-            ("Чирокс? ильтромакс", "Chery", "ПРО МАКС"),
-            ("ЧереЧга", "Chery", "ТИГГО"),
+            ("Чирокс? ильтромакс", "Chery", "PRO MAX"),
+            ("ЧереЧга", "Chery", "TIGGO"),
             # Voice: «Чири тига дев» / «тигго девять» → Tiggo 9.
             ("Чири тига дев.", "Chery", "9"),
             ("чири тигго дев девять", "Chery", "9"),
