@@ -111,8 +111,12 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
         for raw in (
             "Чири Кига 7л",
             "Чири Кига 7 л",
+            "Чири Кига 7эл",
+            "Чири Кига 7 эль",
+            "Чири Кига 7ль",
             "Chery Tiggo 7 L",
             "Черитига л7",
+            "Черитига эл7",
             "Черитига л7 L-7",
         ):
             with self.subTest(raw=raw):
@@ -127,6 +131,15 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
                 brand, model = info
                 self.assertEqual(brand, "Chery", raw)
                 self.assertEqual(model, "ТИГГО 7 ПРО", raw)
+
+    def test_eri_iga_kompromat_variants_map_to_tiggo_7_pro_max(self) -> None:
+        for raw in ("ери ига компромат", "черевзигасонпромат"):
+            with self.subTest(raw=raw):
+                info = self._extract(raw)
+                self.assertIsNotNone(info, raw)
+                brand, model = info
+                self.assertEqual(brand, "Chery", raw)
+                self.assertEqual(model, "ТИГГО 7 ПРО МАКС", raw)
 
     def test_analytics_golden_phrases(self) -> None:
         cases = (

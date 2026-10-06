@@ -55,20 +55,15 @@ def _compose_car_label(brand: Optional[str], model: Optional[str]) -> str:
 
 def _compose_booking_need_text(
     *,
-    car_norm_label: str,
-    car_raw_label: str,
-    mileage_norm: Optional[str],
-    mileage_raw: Optional[str],
+    car_label: str,
+    mileage_value: Optional[str],
     slot_str: str,
     work_wishes: str,
 ) -> str:
-    mileage_norm_label = (mileage_norm or "").strip()
-    mileage_raw_label = (mileage_raw or "").strip()
+    mileage_label = (mileage_value or "").strip()
     return (
-        f"Запись на ТО: авто norm: {car_norm_label or 'не указано'}, "
-        f"авто raw: {car_raw_label or 'не указано'}, "
-        f"пробег norm: {mileage_norm_label or 'не указано'}, "
-        f"пробег raw: {mileage_raw_label or 'не указано'}, "
+        f"Запись на ТО: авто: {car_label or 'не указано'}, "
+        f"пробег: {mileage_label or 'не указано'}, "
         f"дата {slot_str}, работы: {work_wishes}"
     )
 
@@ -119,10 +114,8 @@ async def notify_voice_service_booking_to_max(
         mileage_raw=mileage_raw,
     )
     need_text = _compose_booking_need_text(
-        car_norm_label=car_norm_label,
-        car_raw_label=car_raw_label,
-        mileage_norm=mileage_clean or (mileage_norm or ""),
-        mileage_raw=mileage_clean or "",
+        car_label=car_norm_label or car_raw_label,
+        mileage_value=mileage_clean or mileage_raw or "",
         slot_str=slot_str,
         work_wishes=work_wishes,
     )

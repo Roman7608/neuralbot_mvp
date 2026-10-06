@@ -48,17 +48,25 @@ class VoiceServiceBookingCarLabelTest(unittest.TestCase):
         self.assertEqual(_compose_car_label("", "Tiggo 7"), "Tiggo 7")
         self.assertEqual(_compose_car_label("", ""), "")
 
-    def test_need_text_uses_norm_before_raw_and_mileage(self) -> None:
+    def test_need_text_uses_single_mileage_value(self) -> None:
         msg = _compose_booking_need_text(
-            car_norm_label="Tenet T7",
-            car_raw_label="Тена7",
-            mileage_norm="4300",
-            mileage_raw="четыре триста",
+            car_label="Tenet T7",
+            mileage_value="4300",
             slot_str="29.08 в 15:30",
             work_wishes="ТО-6",
         )
-        self.assertIn("авто norm: Tenet T7, авто raw: Тена7", msg)
-        self.assertIn("пробег norm: 4300, пробег raw: четыре триста", msg)
+        self.assertIn("авто: Tenet T7", msg)
+        self.assertIn("пробег: 4300", msg)
+        self.assertNotIn("пробег raw:", msg)
+
+    def test_need_text_uses_raw_car_label_when_norm_is_absent(self) -> None:
+        msg = _compose_booking_need_text(
+            car_label="Тена7",
+            mileage_value="4300",
+            slot_str="29.08 в 15:30",
+            work_wishes="ТО-6",
+        )
+        self.assertIn("авто: Тена7", msg)
 
 
 if __name__ == "__main__":

@@ -159,6 +159,20 @@ def _pre_normalize_voice_chery_tenet(text: str) -> str:
         t,
         flags=re.IGNORECASE,
     )
+    # Сильные обрезки STT: «ери ига компромат» / «черевзигасонпромат»
+    # ~= «чери тигго 7 про макс».
+    t = re.sub(
+        r"\b(?:ч?ери)\s+и[gг]а\s+ком?прома[тд]\w*\b",
+        " чери тигго 7 про макс ",
+        t,
+        flags=re.IGNORECASE,
+    )
+    t = re.sub(
+        r"\bчеревзигасонпрома[тд]\w*\b",
+        " чери тигго 7 про макс ",
+        t,
+        flags=re.IGNORECASE,
+    )
     # STT 22832: «восьмерка гибрид» -> Chery Tiggo 8 Hybrid.
     t = re.sub(r"\bвосьм[её]рк\w*\s+гибрид\w*\b", " чери тигго 8 гибрид ", t, flags=re.IGNORECASE)
     # STT 22833: «Чирри восьмерка» / «Чирри 8» -> Chery Tiggo 8.
@@ -253,8 +267,9 @@ def _normalize_voice_chery_tenet_extras(t: str) -> str:
         flags=re.IGNORECASE,
     )
     # STT 11237: «Чери чига 7л» / «Чери ... 7 л» -> Chery Tiggo 7 L.
+    # Нормализация суффикса L после 7: эл/эль/л/ль/l (с пробелом или без).
     t = re.sub(
-        r"\b(?:chery|чери|черри)\s+чиг+а\s*7\s*(?:л|l|эль|ель)\b",
+        r"\b(?:chery|чери|черри|чири)\s+чиг+а\s*7\s*(?:эл|эль|л|ль|l)\b",
         "чери тигго 7 л",
         t,
         flags=re.IGNORECASE,
@@ -266,21 +281,21 @@ def _normalize_voice_chery_tenet_extras(t: str) -> str:
         flags=re.IGNORECASE,
     )
     t = re.sub(
-        r"\b(?:chery|чери|черри)\b(?:\s+[a-zа-яё0-9-]{1,8}){0,2}\s+7\s*(?:л|l|эль|ель)\b",
+        r"\b(?:chery|чери|черри|чири)\b(?:\s+[a-zа-яё0-9-]{1,8}){0,2}\s+7\s*(?:эл|эль|л|ль|l)\b",
         "чери тигго 7 л",
         t,
         flags=re.IGNORECASE,
     )
     t = re.sub(r"\bтиг\s*([4789])\b", r"тигго \1", t, flags=re.IGNORECASE)
-    # STT: «7 эль» / «7 l» / «7эл» в конце — Tiggo 7 L.
+    # STT: «7 эль» / «7 эл» / «7 ль» / «7 l» / «7эл» в конце — Tiggo 7 L.
     t = re.sub(
-        r"\b(?:chery|чери)\s+(?:tiggo|тигго)\s*7\s*(?:эль|ель|l)\b",
+        r"\b(?:chery|чери|черри|чири)\s+(?:tiggo|тигго)\s*7\s*(?:эл|эль|л|ль|l)\b",
         "чери тигго 7 л",
         t,
         flags=re.IGNORECASE,
     )
     t = re.sub(
-        r"\b(?:tiggo|тигго)\s*7\s*(?:эль|ель|l)\b",
+        r"\b(?:tiggo|тигго)\s*7\s*(?:эл|эль|л|ль|l)\b",
         "тигго 7 л",
         t,
         flags=re.IGNORECASE,
@@ -305,16 +320,16 @@ def _normalize_voice_chery_tenet_extras(t: str) -> str:
         t,
         flags=re.IGNORECASE,
     )
-    # STT: «тигго л7» / «tiggo l7» / «тигго эль 7».
+    # STT: «тигго л7» / «tiggo l7» / «тигго эль 7» / «тигго эл7».
     t = re.sub(
-        r"\b(?:tiggo|тигго)\s*(?:л|l|эль)\s*([4789])\b",
+        r"\b(?:tiggo|тигго)\s*(?:эл|эль|л|ль|l)\s*([4789])\b",
         r"тигго \1 л",
         t,
         flags=re.IGNORECASE,
     )
-    # STT: «chery л7» после агрессивной нормализации «чер*» в аналитике.
+    # STT: «chery л7 / эл7» после агрессивной нормализации «чер*» в аналитике.
     t = re.sub(
-        r"\b(?:chery|чери)\s*(?:л|l|эль)\s*([4789])\b",
+        r"\b(?:chery|чери)\s*(?:эл|эль|л|ль|l)\s*([4789])\b",
         r"chery tiggo \1 л",
         t,
         flags=re.IGNORECASE,
