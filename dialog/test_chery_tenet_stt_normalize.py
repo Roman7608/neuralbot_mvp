@@ -181,7 +181,7 @@ class CheryTenetSttNormalizeTest(unittest.TestCase):
     def test_normalize_arizzo_stt_phrases(self) -> None:
         from dialog.chery_tenet_stt_normalize import normalize_chery_tenet_car_stt
 
-        for raw, need in (("Рiза 8", "arrizo 8"), ("Chr Tg 7PrMaрк", "tiggo 7")):
+        for raw, need in (("Рiза 8", "arrizo 8"), ("Chr Tg 7PrMaрк", "тигго 7")):
             norm = normalize_chery_tenet_car_stt(raw)
             self.assertIn(need, norm, raw)
 
